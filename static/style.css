@@ -33,3 +33,10 @@
 .exam-list-row{display:flex;align-items:center;justify-content:space-between;gap:15px;border-top:1px solid #e5e9f0;padding:14px 0}
 .exam-list-row p{margin:5px 0}
 @media(max-width:560px){.exam-fields{grid-template-columns:1fr}.exam-list-row{align-items:flex-start;flex-direction:column}.mobile-dock{overflow-x:auto}}
+
+.language-switch{display:flex;justify-content:flex-end;gap:6px;margin:0 0 16px}
+.language-switch button{background:rgba(255,255,255,.84);color:#253147;border:1px solid #d9e0e9;border-radius:13px;padding:8px 13px;font:inherit;font-size:.86rem;cursor:pointer;box-shadow:0 3px 12px rgba(31,45,74,.06)}
+.language-switch button.selected,.language-switch button[aria-pressed="true"]{border-color:#bd0020;background:#fff0f3;color:#ad001c;font-weight:800;box-shadow:0 2px 12px rgba(190,0,25,.13)}
+.language-switch.compact{margin:0 8px 0 0;gap:3px}
+.language-switch.compact button{padding:5px 8px;font-size:1rem}
+@media(max-width:450px){.language-switch.compact button{padding:4px 5px}.language-switch.compact{margin-right:3px}}
