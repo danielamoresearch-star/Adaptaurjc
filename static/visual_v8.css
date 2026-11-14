@@ -144,3 +144,11 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 @keyframes novaTalk{from{filter:brightness(1)}to{filter:brightness(1.17) drop-shadow(0 0 13px #cb315c)}}
 @media(max-width:680px){.ambient-toggle{font-size:10px;padding:6px 8px;max-width:118px}.mentor-widget{right:12px;transform:scale(.76);transform-origin:right bottom}}
 @media(prefers-reduced-motion:reduce){.mentor-holo .holo-eyes,.mentor-widget.speaking .mentor-holo{animation:none!important}}
+
+/* WebGL avatar: retain original animated CSS character if WebGL or CDN unavailable. */
+.mentor-holo.has-three{position:relative;perspective:650px;transform-style:preserve-3d;overflow:visible}
+.mentor-holo.has-three>span{visibility:hidden}
+.mentor-holo .nova-three{position:absolute;inset:50% auto auto 50%;width:160px!important;height:160px!important;max-width:none;transform:translate(-50%,-50%);pointer-events:none;visibility:visible;z-index:5;filter:drop-shadow(0 10px 10px #26416048)}
+.neural-choice{display:inline-flex;align-items:center;gap:7px;font-size:12px;color:#536078;max-width:100%}
+.neural-choice input{width:16px;height:16px}
+@media(max-width:680px){.mentor-holo .nova-three{width:140px!important;height:140px!important}}
