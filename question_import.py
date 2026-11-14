@@ -1,4 +1,4 @@
-"""Teacher-only staging of structured question imports. Scanned images require OCR externally."""
+"""Teacher-only staging with optional on-server OCR and human approval."""
 import csv,io,json,secrets,zipfile,xml.etree.ElementTree as ET
 from fastapi import UploadFile,File,Header,HTTPException
 from pydantic import BaseModel
@@ -21,9 +21,36 @@ def parse_file(name,raw):
   text='\n'.join(p for p in paragraphs if p)
  elif ext=='pdf':
   from pypdf import PdfReader
-  text='\n'.join(page.extract_text() or '' for page in PdfReader(io.BytesIO(raw)).pages[:80])
- else:raise HTTPException(400,'Formato permitido: CSV, XLSX, DOCX o PDF')
- if len(text.strip())<30:raise HTTPException(422,'No se detectó texto. Si el documento está escaneado, aplica OCR antes de importarlo.')
+  text='\n'.join(page.extract_text() or '' for page in PdfReader(io.BytesIO(raw)).pages[:30])
+  if len(text.strip())<30:
+   try:
+    import fitz
+    from rapidocr_onnxruntime import RapidOCR
+    engine=RapidOCR()
+    doc=fitz.open(stream=raw,filetype='pdf')
+    chunks=[]
+    for page in list(doc)[:12]:
+     pix=page.get_pixmap(matrix=fitz.Matrix(1.5,1.5),alpha=False)
+     from PIL import Image
+     im=Image.frombytes('RGB',[pix.width,pix.height],pix.samples)
+     import numpy as np
+     result,_=engine(np.array(im))
+     chunks.append('\n'.join(x[1] for x in (result or [])))
+    text='\n'.join(chunks)
+   except ImportError:
+    raise HTTPException(503,'OCR no disponible en el servidor: instalar PyMuPDF, RapidOCR y sus dependencias.')
+ elif ext in ('png','jpg','jpeg','webp'):
+  try:
+   from rapidocr_onnxruntime import RapidOCR
+   from PIL import Image
+   import numpy as np
+   im=Image.open(io.BytesIO(raw)).convert('RGB')
+   if im.width*im.height>12000000:raise HTTPException(413,'Imagen demasiado grande')
+   result,_=RapidOCR()(np.array(im))
+   text='\n'.join(x[1] for x in (result or []))
+  except ImportError:raise HTTPException(503,'OCR no disponible en el servidor.')
+ else:raise HTTPException(400,'Formato permitido: CSV, XLSX, DOCX, PDF o imagen')
+ if len(text.strip())<30:raise HTTPException(422,'No se detectó texto. El OCR no ha reconocido suficiente texto; revisa la calidad del escaneo.')
  # Portable, explicit field syntax for text-based documents.
  blocks=[b.strip() for b in text.replace('\r','').split('---') if b.strip()]
  out=[]
@@ -65,7 +92,7 @@ def register(app,db,auth,bank,topics,iso):
  @app.post('/api/teacher/import/questions')
  async def upload_questions(file:UploadFile=File(...),authorization:str|None=Header(default=None)):
   auth(authorization,True)
-  if not file.filename or file.filename.rsplit('.',1)[-1].lower() not in ('csv','xlsx','docx','pdf'):raise HTTPException(400,'Extensión no permitida')
+  if not file.filename or file.filename.rsplit('.',1)[-1].lower() not in ('csv','xlsx','docx','pdf','png','jpg','jpeg','webp'):raise HTTPException(400,'Extensión no permitida')
   raw=await file.read(MAX_BYTES+1)
   if len(raw)>MAX_BYTES:raise HTTPException(413,'Archivo superior a 8 MB')
   try:rows=parse_file(file.filename,raw)
