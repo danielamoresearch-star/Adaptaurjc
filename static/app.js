@@ -43,19 +43,32 @@ function closeMenu(){const bar=$('#sidebar');bar.classList.remove('open');$('#na
 function toggleMenu(){const opened=!$('#sidebar').classList.contains('open');$('#sidebar').classList.toggle('open',opened);$('#navScrim').hidden=!opened;$('#mobileMenu').setAttribute('aria-expanded',String(opened));document.body.classList.toggle('menu-open',opened)}
 function navbind(){document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>navigate(b.dataset.page));$('#mobileMenu').onclick=toggleMenu;$('#navScrim').onclick=closeMenu;document.addEventListener('keydown',e=>{if(e.key==='Escape')closeMenu()});$('#logout').onclick=logout;$('#logoutTeacher').onclick=logout;$('#mentorToggle').onclick=()=>{const el=$('#mentorWidget');el.classList.toggle('open');event(el.classList.contains('open')?'mentor_open':'mentor_close',{page});};}
 function say(text){const el=$('#mentorSpeech');el.textContent=text;if(window.innerWidth<=680 && page==='dashboard'){$('#mentorWidget').classList.remove('open');return;}$('#mentorWidget').classList.add('open');clearTimeout(mentorDismissTimer);mentorDismissTimer=setTimeout(()=>$('#mentorWidget').classList.remove('open'),7500)}
-function speak(text){
- if(!('speechSynthesis' in window)){toast('La síntesis de voz no está disponible en este navegador');return}
- speechSynthesis.cancel();
+let novaAudio=null;
+async function speak(text){
+ const avatar=$('#mentorWidget');
+ if(novaAudio){novaAudio.pause();novaAudio=null}
+ if('speechSynthesis' in window)speechSynthesis.cancel();
  const lang=(document.documentElement.lang||'es').startsWith('en')?'en':'es';
- const utterance=new SpeechSynthesisUtterance(String(text).slice(0,2500));
- utterance.lang=lang==='es'?'es-ES':'en-GB';utterance.rate=.96;utterance.pitch=1.0;utterance.volume=.85;
- const voices=speechSynthesis.getVoices().filter(v=>v.lang.toLowerCase().startsWith(lang));
- const preferred=voices.find(v=>/natural|neural|premium|enhanced/i.test(v.name))||voices.find(v=>/google|microsoft/i.test(v.name))||voices.find(v=>v.lang.toLowerCase()===utterance.lang.toLowerCase())||voices[0];
- if(preferred)utterance.voice=preferred;
- const avatar=$('#mentorWidget');avatar?.classList.add('speaking');
- utterance.onend=utterance.onerror=()=>avatar?.classList.remove('speaking');
+ const finish=()=>{avatar?.classList.remove('speaking');avatar?.style.removeProperty('--mouth-open')};
  window.adaptaAmbientDuck?.();
- speechSynthesis.speak(utterance);
+ avatar?.classList.add('speaking');
+ if(localStorage.getItem('adapta_neural_voice')==='yes'){
+  try{
+   const r=await fetch('/api/voice/neural',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({text:String(text).slice(0,1200),language:lang})});
+   if(r.ok){
+    const url=URL.createObjectURL(await r.blob());novaAudio=new Audio(url);
+    novaAudio.onended=novaAudio.onerror=()=>{finish();URL.revokeObjectURL(url)};
+    await novaAudio.play();return;
+   }
+  }catch(e){/* Fall back to browser speech */}
+ }
+ if(!('speechSynthesis' in window)){finish();toast('La síntesis de voz no está disponible');return}
+ const u=new SpeechSynthesisUtterance(String(text).slice(0,2500));
+ u.lang=lang==='es'?'es-ES':'en-GB';u.rate=.96;u.pitch=1;u.volume=.85;
+ const voices=speechSynthesis.getVoices().filter(v=>v.lang.toLowerCase().startsWith(lang));
+ u.voice=voices.find(v=>/natural|neural|premium|enhanced/i.test(v.name))||voices.find(v=>/google|microsoft/i.test(v.name))||voices[0]||null;
+ u.onboundary=e=>{avatar?.style.setProperty('--mouth-open',e.charIndex%3===0?'8px':'3px')};
+ u.onend=u.onerror=finish;speechSynthesis.speak(u);
 }
 
 function navigate(p){if(!['dashboard','diagnostic','practice','mentor','research','exams'].includes(p))return;if(feedback){active=null}page=p;stopTimer();feedback=null;closeMenu();document.querySelectorAll('[data-page]').forEach(b=>{b.classList.toggle('active',b.dataset.page===p);if(b.dataset.page===p)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});const names={dashboard:'Mi progreso',diagnostic:'Diagnóstico inicial',practice:'Práctica adaptativa',mentor:'Tutor personal',research:'Datos de investigación',exams:'Exámenes'};$('#locationName').textContent=names[p];event('tab_view',{page:p});render();}
@@ -146,8 +159,8 @@ $('#next').onclick=async()=>{const prevphase=active.phase;active=null;feedback=n
 $('#voiceExplanation').onclick=()=>speak(f.explanation);
 $('#learnMore').onclick=()=>{tutorTopic=q.topic;active=null;feedback=null;navigate('mentor')};
 say(f.correct?'¡Buen trabajo! '+f.explanation:advice+' '+f.explanation);event('feedback_read',{topic:q.topic},active.task_id)}
-function drawMentor(){const t=lessons[tutorTopic];$('#content').innerHTML=`<div class="eyebrow">TUTORÍA PEDAGÓGICA</div><h1>Aprender también es preguntar.</h1><p class="muted">NOVA te acompaña con explicaciones contrastables, ejemplos y pasos pequeños. Sus respuestas proceden de contenido docente estructurado, no de generación libre de IA.</p><section class="card"><h2>¿Qué tema quieres comprender mejor?</h2><div class="tutor-topics">${TOPICS.map(x=>`<button data-tutor="${escapeHTML(x)}" class="${tutorTopic===x?'selected':''}">${escapeHTML(x)}</button>`).join('')}</div></section><section class="tutor-box"><div class="between"><h2>Hablemos de ${escapeHTML(tutorTopic).toLowerCase()}</h2><div class="tutor-visual" aria-hidden="true">✦</div></div><div class="message"><div class="message-avatar">N</div><div class="bubble">${escapeHTML(t.idea)}</div></div><h3>Lo resolvemos en tres pasos</h3><ol>${t.steps.map(step=>`<li style="margin:12px 0;line-height:1.5">${escapeHTML(step)}</li>`).join('')}</ol><div class="guide"><div class="guide-icon">!</div><div><strong>Un error frecuente</strong><p>${escapeHTML(t.error)}</p></div></div><div class="message"><div class="message-avatar">N</div><div class="bubble"><strong>Ejemplo resuelto:</strong> ${escapeHTML(t.example)}</div></div><div class="answer-actions"><button class="btn btn-primary" id="tutorPractice">Practicar este tema →</button><button class="btn btn-soft" id="tutorSpeak">♫ Escuchar</button></div></section>`;
-document.querySelectorAll('[data-tutor]').forEach(b=>b.onclick=()=>{tutorTopic=b.dataset.tutor;drawMentor()});$('#tutorPractice').onclick=()=>{topicFilter=tutorTopic;kindFilter='';navigate('practice')};$('#tutorSpeak').onclick=()=>speak(t.idea+' '+t.steps.join('. '));say('Los errores no te definen. Lo importante es entender por qué ocurre cada resultado.')}
+function drawMentor(){const t=lessons[tutorTopic];$('#content').innerHTML=`<div class="eyebrow">TUTORÍA PEDAGÓGICA</div><h1>Aprender también es preguntar.</h1><p class="muted">NOVA te acompaña con explicaciones contrastables, ejemplos y pasos pequeños. Sus respuestas proceden de contenido docente estructurado, no de generación libre de IA.</p><section class="card"><h2>¿Qué tema quieres comprender mejor?</h2><div class="tutor-topics">${TOPICS.map(x=>`<button data-tutor="${escapeHTML(x)}" class="${tutorTopic===x?'selected':''}">${escapeHTML(x)}</button>`).join('')}</div></section><section class="tutor-box"><div class="between"><h2>Hablemos de ${escapeHTML(tutorTopic).toLowerCase()}</h2><div class="tutor-visual" aria-hidden="true">✦</div></div><div class="message"><div class="message-avatar">N</div><div class="bubble">${escapeHTML(t.idea)}</div></div><h3>Lo resolvemos en tres pasos</h3><ol>${t.steps.map(step=>`<li style="margin:12px 0;line-height:1.5">${escapeHTML(step)}</li>`).join('')}</ol><div class="guide"><div class="guide-icon">!</div><div><strong>Un error frecuente</strong><p>${escapeHTML(t.error)}</p></div></div><div class="message"><div class="message-avatar">N</div><div class="bubble"><strong>Ejemplo resuelto:</strong> ${escapeHTML(t.example)}</div></div><div class="answer-actions"><button class="btn btn-primary" id="tutorPractice">Practicar este tema →</button><button class="btn btn-soft" id="tutorSpeak">♫ Escuchar</button><label class="neural-choice"><input type="checkbox" id="neuralVoiceChoice"> Voz neuronal (requiere servicio configurado)</label></div></section>`;
+document.querySelectorAll('[data-tutor]').forEach(b=>b.onclick=()=>{tutorTopic=b.dataset.tutor;drawMentor()});$('#tutorPractice').onclick=()=>{topicFilter=tutorTopic;kindFilter='';navigate('practice')};$('#tutorSpeak').onclick=()=>speak(t.idea+' '+t.steps.join('. '));const voiceChoice=$('#neuralVoiceChoice');if(voiceChoice){voiceChoice.checked=localStorage.getItem('adapta_neural_voice')==='yes';voiceChoice.onchange=()=>localStorage.setItem('adapta_neural_voice',voiceChoice.checked?'yes':'no')}say('Los errores no te definen. Lo importante es entender por qué ocurre cada resultado.')}
 function drawResearch(){$('#content').innerHTML=`<div class="eyebrow">TRANSPARENCIA Y METODOLOGÍA</div><h1>Tu actividad, con trazabilidad.</h1><p class="muted">El estudio analiza aprendizaje, no la identidad personal. Tu código está separado de tu nombre y el profesor conserva un registro centralizado de tus respuestas.</p>${section('¿Qué se registra?',`<div class="grid3"><div class="guide"><div class="guide-icon">1</div><div><strong>Respuestas</strong><p>Pregunta, tema, modalidad, figura analizada, nivel, respuesta y resultado.</p></div></div><div class="guide"><div class="guide-icon">2</div><div><strong>Tiempo</strong><p>Inicio y fin de ejercicio, duración y tiempo agotado.</p></div></div><div class="guide"><div class="guide-icon">3</div><div><strong>Aprendizaje</strong><p>Pistas, selección y cambio de opciones, ampliación de gráficos, avisos del reloj y probabilidad de dominio estimada antes y después.</p></div></div></div>`)}<div class="research-notice"><strong>Sobre el modelo adaptativo.</strong> Se utiliza Bayesian Knowledge Tracing (BKT) por competencia con parámetros iniciales no calibrados en una muestra real. El algoritmo orienta la práctica, pero sus probabilidades no sustituyen notas oficiales ni constituyen resultados científicos validados. La asignación a grupos y los consentimientos deben gestionarse bajo un protocolo ético autorizado.</div>`;}
 let prepared=[];
 async function renderTeacher(){const data=await(await request('/api/teacher/overview')).json();const s=data.students||[];let activeN=s.filter(x=>x.active).length,total=s.reduce((a,x)=>a+x.answers,0),graded=s.reduce((a,x)=>a+x.graded,0),correct=s.reduce((a,x)=>a+x.correct,0),graphs=s.reduce((a,x)=>a+(x.graph_attempts||0),0),graphCorrect=s.reduce((a,x)=>a+(x.graph_correct||0),0);
