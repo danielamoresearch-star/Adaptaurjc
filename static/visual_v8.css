@@ -130,3 +130,17 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 /* Readable math rendering */
 .math-inline{font-family:Georgia,'Times New Roman',serif;font-size:1.06em;white-space:normal}
 .math-display{display:block;overflow-x:auto;max-width:100%;padding:9px 2px;text-align:center}
+
+/* NOVA 10: expressive accessible avatar and optional soundtrack */
+.ambient-toggle{border:1px solid #e4d4dd;background:linear-gradient(150deg,#fff,#fff2f6);color:#9c1637;border-radius:999px;font-size:11px;font-weight:650;padding:8px 11px;min-height:34px;cursor:pointer;white-space:nowrap;box-shadow:0 3px 9px #8d234015}
+.ambient-toggle[aria-pressed=true]{background:linear-gradient(140deg,#f4ffe9,#e4f7e8);color:#25633c;border-color:#b7ddbd}
+.mentor-holo{isolation:isolate;box-shadow:0 13px 28px #243d6770,0 0 0 3px #ffffff9c;cursor:pointer}
+.mentor-holo .holo-head{filter:drop-shadow(0 2px 4px #2236536e)}
+.mentor-holo .holo-eyes{animation:novaBlink 6s ease-in-out infinite}
+.mentor-widget.speaking .mentor-holo{animation:novaFloat 1.9s ease-in-out infinite,novaTalk .45s ease-in-out infinite alternate}
+.mentor-widget.speaking .holo-ring{animation-duration:2s}
+.mentor-widget.speaking .speech{border-color:#b61845;box-shadow:0 6px 20px #bf244329}
+@keyframes novaBlink{0%,44%,47%,100%{scale:1 1}45%,46%{scale:1 .12}}
+@keyframes novaTalk{from{filter:brightness(1)}to{filter:brightness(1.17) drop-shadow(0 0 13px #cb315c)}}
+@media(max-width:680px){.ambient-toggle{font-size:10px;padding:6px 8px;max-width:118px}.mentor-widget{right:12px;transform:scale(.76);transform-origin:right bottom}}
+@media(prefers-reduced-motion:reduce){.mentor-holo .holo-eyes,.mentor-widget.speaking .mentor-holo{animation:none!important}}
