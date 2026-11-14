@@ -107,8 +107,7 @@
  }
  function setLang(next){if(next!=='es'&&next!=='en')return;lang=next;localStorage.setItem('adapta_lang',lang);document.documentElement.lang=lang;
    // Restore Spanish source by re-rendering active page; avoid modifying answers or restarting timers.
-   if(typeof window.adaptaRefreshLanguage==='function')window.adaptaRefreshLanguage();
-   apply(document);
+   window.location.reload();
  }
  document.addEventListener('click',e=>{const b=e.target.closest('[data-lang]');if(b){e.preventDefault();setLang(b.dataset.lang)}});
  const observer=new MutationObserver(()=>{if(!busy)apply(document)});
