@@ -338,7 +338,7 @@ def teacher_export(authorization:str|None=Header(default=None)):
 def home():return FileResponse(ROOT/'static'/'index.html',headers={'Cache-Control':'no-store'})
 @app.get('/static/{file}')
 def static(file:str):
-    if file not in ('style.css','responsive.css','visual_v8.css','app.js','i18n.js'):raise HTTPException(404)
+    if file not in ('style.css','responsive.css','visual_v8.css','app.js','i18n.js','math.js'):raise HTTPException(404)
     return FileResponse(ROOT/'static'/file)
 
 @app.get('/manifest.webmanifest')
@@ -384,8 +384,8 @@ async def protect_headers(request:Request,call_next):
     response.headers['X-Robots-Tag']='noindex, nofollow, noarchive'
     response.headers['Permissions-Policy']='camera=(), geolocation=(), microphone=()'
     response.headers['Content-Security-Policy']=(
-        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
-        "img-src 'self' data:; connect-src 'self'; font-src 'self'; "
+        "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+        "img-src 'self' data:; connect-src 'self'; font-src 'self' https://cdn.jsdelivr.net; "
         "base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; worker-src 'self'"
     )
     if request.headers.get('x-forwarded-proto','').lower()=='https':
