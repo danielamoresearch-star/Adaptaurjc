@@ -338,7 +338,7 @@ def teacher_export(authorization:str|None=Header(default=None)):
 def home():return FileResponse(ROOT/'static'/'index.html',headers={'Cache-Control':'no-store'})
 @app.get('/static/{file}')
 def static(file:str):
-    if file not in ('style.css','responsive.css','visual_v8.css','app.js'):raise HTTPException(404)
+    if file not in ('style.css','responsive.css','visual_v8.css','app.js','i18n.js'):raise HTTPException(404)
     return FileResponse(ROOT/'static'/file)
 
 @app.get('/manifest.webmanifest')
