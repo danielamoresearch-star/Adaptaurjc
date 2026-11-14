@@ -275,6 +275,9 @@ def log_event(data:EventRequest,authorization:str|None=Header(default=None)):
         event(c,s['student_id'],data.event_type,data.task_id,{str(k)[:60]:str(v)[:200] for k,v in data.details.items() if k in ('page','topic','kind','duration','note','option','seconds_remaining','count','question_id')})
     return {'ok':True}
 
+from exams import register as register_exams
+register_exams(app,database,auth,BANK,TOPICS,publicq,p_topic,iso,utc,event)
+
 @app.get('/api/teacher/overview')
 def teacher_overview(authorization:str|None=Header(default=None)):
     auth(authorization,True)
