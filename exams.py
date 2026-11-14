@@ -54,6 +54,10 @@ def register(app,db,auth,bank,topics,publicq,p_topic,iso,utc,event):
     def choices(c,spec,sid):
         ts=json.loads(spec['topics_json']);ks=json.loads(spec['kinds_json'])
         candidates=[q for q in bank.values() if q['topic'] in ts and q['kind'] in ks and q['kind']!='development']
+        # Avoid recent repetition where sufficient alternatives exist.
+        recent={r['question_id'] for r in c.execute('SELECT question_id FROM attempts WHERE student_id=? ORDER BY id DESC LIMIT 250',(sid,)).fetchall()}
+        fresh=[q for q in candidates if q['id'] not in recent]
+        if len(fresh)>=spec['question_count']:candidates=fresh
         # News is entered by a teacher with source metadata; not automatically fact-checked.
         if 'news' in ks:
             for r in c.execute('SELECT * FROM exam_news').fetchall():
@@ -81,6 +85,7 @@ def register(app,db,auth,bank,topics,publicq,p_topic,iso,utc,event):
                 if not advanced:break
         else:
             selected=rng.sample(candidates,spec['question_count'])
+        rng.shuffle(selected)
         return [q['id'] for q in selected]
     def question(c,qid):
         if isinstance(qid,int):return bank[qid]
