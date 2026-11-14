@@ -4,10 +4,10 @@
 (function(){
  let scheduled=false,busy=false;
  function convert(t){
-  if(/\\\\\(|\\\\\[|\\\\\$/.test(t))return t;
+  if(/\\\(|\\\[|\\\$/.test(t))return t;
   return t.replace(/(?:Qd|Qs|CMg|IMg|CT|P|Q|M|Px|q1|q2|X)\s*(?:\([^)]{1,12}\))?\s*=\s*[0-9A-Za-z()+−×*\/².\s-]{2,75}/g,m=>{
-    const v=m.trim().replace(/²/g,'^{2}').replace(/×/g,'\\\\times ').replace(/−/g,'-').replace(/\b(q1|q2|Qd|Qs|CMg|IMg|CT|Px)\b/g,x=>({'q1':'q_{1}','q2':'q_{2}','Qd':'Q_d','Qs':'Q_s','CMg':'CMg','IMg':'IMg','CT':'CT','Px':'P_x'}[x]));
-    return '\\\\('+v+'\\\\)';
+    const v=m.trim().replace(/²/g,'^{2}').replace(/×/g,'\\times ').replace(/−/g,'-').replace(/\b(q1|q2|Qd|Qs|CMg|IMg|CT|Px)\b/g,x=>({'q1':'q_{1}','q2':'q_{2}','Qd':'Q_d','Qs':'Q_s','CMg':'CMg','IMg':'IMg','CT':'CT','Px':'P_x'}[x]));
+    return '\\('+v+'\\)';
   });
  }
  function apply(){
