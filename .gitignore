@@ -1,0 +1,14 @@
+# Never commit identifiable academic records, credentials, or databases.
+.env
+.env.*
+*.sqlite3
+*.sqlite3-*
+*.db
+*.db-*
+*.xlsx
+*.csv
+*.log
+__pycache__/
+.pytest_cache/
+.venv/
+venv/
