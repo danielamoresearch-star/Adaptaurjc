@@ -43,7 +43,21 @@ function closeMenu(){const bar=$('#sidebar');bar.classList.remove('open');$('#na
 function toggleMenu(){const opened=!$('#sidebar').classList.contains('open');$('#sidebar').classList.toggle('open',opened);$('#navScrim').hidden=!opened;$('#mobileMenu').setAttribute('aria-expanded',String(opened));document.body.classList.toggle('menu-open',opened)}
 function navbind(){document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>navigate(b.dataset.page));$('#mobileMenu').onclick=toggleMenu;$('#navScrim').onclick=closeMenu;document.addEventListener('keydown',e=>{if(e.key==='Escape')closeMenu()});$('#logout').onclick=logout;$('#logoutTeacher').onclick=logout;$('#mentorToggle').onclick=()=>{const el=$('#mentorWidget');el.classList.toggle('open');event(el.classList.contains('open')?'mentor_open':'mentor_close',{page});};}
 function say(text){const el=$('#mentorSpeech');el.textContent=text;if(window.innerWidth<=680 && page==='dashboard'){$('#mentorWidget').classList.remove('open');return;}$('#mentorWidget').classList.add('open');clearTimeout(mentorDismissTimer);mentorDismissTimer=setTimeout(()=>$('#mentorWidget').classList.remove('open'),7500)}
-function speak(text){if(!('speechSynthesis' in window)){toast('Este navegador no dispone de voz sintetizada');return}speechSynthesis.cancel();const utterance=new SpeechSynthesisUtterance(String(text).slice(0,3500));utterance.lang='es-ES';utterance.rate=.88;utterance.pitch=1.06;utterance.volume=.92;const voices=speechSynthesis.getVoices();const spanish=voices.filter(v=>v.lang.toLowerCase().startsWith('es'));const preferred=spanish.find(v=>/natural|neural|premium|google|microsoft/i.test(v.name))||spanish.find(v=>v.lang==='es-ES')||spanish[0];if(preferred)utterance.voice=preferred;speechSynthesis.speak(utterance)}
+function speak(text){
+ if(!('speechSynthesis' in window)){toast('La síntesis de voz no está disponible en este navegador');return}
+ speechSynthesis.cancel();
+ const lang=(document.documentElement.lang||'es').startsWith('en')?'en':'es';
+ const utterance=new SpeechSynthesisUtterance(String(text).slice(0,2500));
+ utterance.lang=lang==='es'?'es-ES':'en-GB';utterance.rate=.96;utterance.pitch=1.0;utterance.volume=.85;
+ const voices=speechSynthesis.getVoices().filter(v=>v.lang.toLowerCase().startsWith(lang));
+ const preferred=voices.find(v=>/natural|neural|premium|enhanced/i.test(v.name))||voices.find(v=>/google|microsoft/i.test(v.name))||voices.find(v=>v.lang.toLowerCase()===utterance.lang.toLowerCase())||voices[0];
+ if(preferred)utterance.voice=preferred;
+ const avatar=$('#mentorWidget');avatar?.classList.add('speaking');
+ utterance.onend=utterance.onerror=()=>avatar?.classList.remove('speaking');
+ window.adaptaAmbientDuck?.();
+ speechSynthesis.speak(utterance);
+}
+
 function navigate(p){if(!['dashboard','diagnostic','practice','mentor','research','exams'].includes(p))return;if(feedback){active=null}page=p;stopTimer();feedback=null;closeMenu();document.querySelectorAll('[data-page]').forEach(b=>{b.classList.toggle('active',b.dataset.page===p);if(b.dataset.page===p)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});const names={dashboard:'Mi progreso',diagnostic:'Diagnóstico inicial',practice:'Práctica adaptativa',mentor:'Tutor personal',research:'Datos de investigación',exams:'Exámenes'};$('#locationName').textContent=names[p];event('tab_view',{page:p});render();}
 function meter(name,value){return `<div class="skill-row"><div class="skill-label"><span>${escapeHTML(name)}</span><strong>${Math.round(value*100)} %</strong></div><div class="track"><span style="width:${Math.round(value*100)}%"></span></div></div>`}
 function section(head,content){return `<section class="card"><div class="card-head"><h2>${head}</h2></div>${content}</section>`}
