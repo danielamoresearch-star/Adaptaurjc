@@ -97,3 +97,14 @@ h2 {font-weight:800}
 .graph-insight-icon{width:56px;height:56px;flex:0 0 56px;display:grid;place-items:center;color:white;font-size:28px;border-radius:17px;background:linear-gradient(145deg,#d52a4c,#b0102e);box-shadow:inset 0 2px #ffffff77,0 5px 0 #940d29,0 9px 13px #9b133343}
 .graph-insight b{font-size:15px;color:#293449}.graph-insight p{color:#728199;font-size:13px;margin:5px 0 0}.graph-insight .pill{margin-left:auto}
 @media(max-width:680px){.graph-insight{padding:15px}.graph-insight .pill{margin-left:0}}
+
+/* ADAPTA-ITS 9.0: legibilidad, tactilidad y accesibilidad */
+:root{--focus-ring:#b40027}
+.auth-card{width:min(100%,520px);padding:clamp(22px,5vw,42px)}
+.auth-card input{min-height:50px;font-size:16px}
+.auth-card .tabs button{min-height:48px}
+.btn-primary{min-height:52px;box-shadow:0 12px 24px #b4002730,inset 0 1px 0 #ffffff70}
+.btn-primary:active:not(:disabled){transform:translateY(1px);box-shadow:0 3px 9px #b4002730}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid var(--focus-ring);outline-offset:3px}
+@media(max-width:600px){.auth-cover{padding:16px;min-height:100dvh}.auth-card{border-radius:22px}.auth-title strong{font-size:clamp(20px,6vw,25px)}.tabs{gap:4px}.tabs button{font-size:14px}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
