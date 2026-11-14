@@ -108,3 +108,25 @@ h2 {font-weight:800}
 button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid var(--focus-ring);outline-offset:3px}
 @media(max-width:600px){.auth-cover{padding:16px;min-height:100dvh}.auth-card{border-radius:22px}.auth-title strong{font-size:clamp(20px,6vw,25px)}.tabs{gap:4px}.tabs button{font-size:14px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
+
+/* Compact navigation, visible animated NOVA avatar */
+.side-nav button{min-height:39px;padding:8px 11px;gap:9px;font-size:13px}
+.side-nav button>span{font-size:15px;min-width:19px;width:19px;text-align:center}
+.mobile-dock{min-height:56px;--nav-height:56px}
+.mobile-dock button{min-width:0;padding:4px 2px;gap:2px}
+.mobile-dock button>span{font-size:17px;line-height:1.2}
+.mobile-dock button small{font-size:10px;line-height:1.2}
+.mentor-widget{z-index:150;opacity:1!important;visibility:visible!important}
+.mentor-holo{animation:novaFloat 3.4s ease-in-out infinite,novaGlow 4s ease-in-out infinite;transform-origin:center bottom}
+.mentor-holo .holo-ring{animation:novaOrbit 8s linear infinite}
+.mentor-holo .ring-b{animation-direction:reverse;animation-duration:6s}
+.mentor-holo .hero-cape{animation:novaCape 2.6s ease-in-out infinite;transform-origin:top center}
+@keyframes novaFloat{0%,100%{translate:0 0}50%{translate:0 -9px}}
+@keyframes novaGlow{0%,100%{filter:drop-shadow(0 5px 9px #cb00174d)}50%{filter:drop-shadow(0 9px 19px #cb00178c)}}
+@keyframes novaOrbit{to{rotate:360deg}}
+@keyframes novaCape{0%,100%{rotate:-4deg}50%{rotate:7deg}}
+@media(max-width:680px){.mentor-widget{right:9px;transform:scale(.72);transform-origin:right bottom}.mobile-dock{padding:3px 4px}.mobile-dock button{flex:1}}
+@media(prefers-reduced-motion:reduce){.mentor-holo,.mentor-holo .holo-ring,.mentor-holo .hero-cape{animation:none!important}}
+/* Readable math rendering */
+.math-inline{font-family:Georgia,'Times New Roman',serif;font-size:1.06em;white-space:normal}
+.math-display{display:block;overflow-x:auto;max-width:100%;padding:9px 2px;text-align:center}
