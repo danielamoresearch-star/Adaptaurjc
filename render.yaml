@@ -1,0 +1,20 @@
+# ADAPTA-ITS 8.1: one Python web service and a persistent SQLite disk.
+# Render paid web compute and disk are required. Review billing before provisioning.
+services:
+  - type: web
+    name: adapta-its-microeconomia
+    runtime: python
+    plan: starter
+    region: frankfurt
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT --workers 1
+    healthCheckPath: /healthz
+    disk:
+      name: adapta-data
+      mountPath: /var/data
+      sizeGB: 5
+    envVars:
+      - key: ADAPTA_DB
+        value: /var/data/adapta.sqlite3
+      - key: ADAPTA_TEACHER_PASSWORD
+        sync: false
