@@ -1,0 +1,12 @@
+'use strict';
+/* Optional original generative ambient soundtrack. No third-party audio assets. */
+(()=>{let ctx=null,master=null,voices=[],playing=false,timer=null,step=0;
+const notes=[220,261.63,329.63,392,246.94,293.66,369.99,440];
+function stop(){playing=false;clearInterval(timer);if(master&&ctx){master.gain.setTargetAtTime(0,ctx.currentTime,.18)}document.querySelectorAll('[data-ambient]').forEach(b=>{b.setAttribute('aria-pressed','false');b.textContent='♫ Música: apagada'})}
+function chord(){if(!ctx||!playing)return;let now=ctx.currentTime;const base=notes[(step++%4)*2];[1,1.25,1.5].forEach((ratio,i)=>{const o=ctx.createOscillator(),g=ctx.createGain(),f=ctx.createBiquadFilter();o.type='sine';o.frequency.setValueAtTime(base*ratio,now);f.type='lowpass';f.frequency.value=650;g.gain.setValueAtTime(.0001,now);g.gain.exponentialRampToValueAtTime(.012/(i+1),now+1.3);g.gain.exponentialRampToValueAtTime(.0001,now+6.8);o.connect(f);f.connect(g);g.connect(master);o.start(now);o.stop(now+7)})}
+async function start(){try{if(!ctx){ctx=new (window.AudioContext||window.webkitAudioContext)();master=ctx.createGain();master.gain.value=0;master.connect(ctx.destination)}await ctx.resume();master.gain.setTargetAtTime(.65,ctx.currentTime,.25);playing=true;chord();timer=setInterval(chord,5200);document.querySelectorAll('[data-ambient]').forEach(b=>{b.setAttribute('aria-pressed','true');b.textContent='♫ Música: encendida'})}catch{stop()}}
+function install(){const dock=document.querySelector('.top-actions');if(!dock)return;const b=document.createElement('button');b.className='ambient-toggle';b.type='button';b.dataset.ambient='';b.setAttribute('aria-pressed','false');b.title='Activar o desactivar música ambiental';b.textContent='♫ Música: apagada';b.onclick=()=>playing?stop():start();dock.prepend(b);
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&playing)stop()});document.querySelectorAll('#logout,#logoutTeacher').forEach(el=>el.addEventListener('click',stop))}
+document.addEventListener('DOMContentLoaded',install);
+window.adaptaAmbientDuck=()=>{if(ctx&&master&&playing){master.gain.setTargetAtTime(.18,ctx.currentTime,.1);setTimeout(()=>{if(playing)master.gain.setTargetAtTime(.65,ctx.currentTime,.3)},13000)}};
+})();
