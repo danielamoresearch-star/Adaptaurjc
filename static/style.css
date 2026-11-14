@@ -22,3 +22,14 @@
 .pedagogic-explanation h4{font-size:16px;margin:0 0 10px;color:#26374b}
 .pedagogic-explanation p{line-height:1.85;margin:10px 0}
 @media(max-width:480px){.glass-timer{width:100%;justify-content:center}.pedagogic-explanation{padding:14px}}
+
+.exam-topic-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;margin:12px 0 20px}
+.exam-topic-grid label,.exam-check{display:flex;gap:10px;align-items:center;border:1px solid #e5e9f0;border-radius:13px;padding:12px;background:linear-gradient(145deg,#fff,#f5f7fa);line-height:1.5}
+.exam-topic-grid input,.exam-check input{width:18px;height:18px;accent-color:#cb0017;flex-shrink:0}
+.exam-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:15px 0}
+.exam-fields label{display:grid;gap:8px;font-weight:700}
+.exam-fields input,.exam-config input{border:1px solid #d6dfea;border-radius:10px;padding:11px;max-width:100%}
+.exam-config>.btn{margin-top:18px}
+.exam-list-row{display:flex;align-items:center;justify-content:space-between;gap:15px;border-top:1px solid #e5e9f0;padding:14px 0}
+.exam-list-row p{margin:5px 0}
+@media(max-width:560px){.exam-fields{grid-template-columns:1fr}.exam-list-row{align-items:flex-start;flex-direction:column}.mobile-dock{overflow-x:auto}}
