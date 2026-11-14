@@ -12,7 +12,8 @@ ROOT=Path(__file__).resolve().parent
 DB=Path(os.getenv('ADAPTA_DB',str(ROOT/'adapta_v6.sqlite3')))
 TEACHER_PASSWORD=os.environ.get('ADAPTA_TEACHER_PASSWORD','')
 if len(TEACHER_PASSWORD)<14:raise RuntimeError('Define ADAPTA_TEACHER_PASSWORD con al menos 14 caracteres.')
-BANK={int(q['id']):q for q in json.loads((ROOT/'questions.json').read_text('utf-8'))}
+from question_generator import generate_bank
+BANK={int(q['id']):q for q in generate_bank(json.loads((ROOT/'questions.json').read_text('utf-8')),10000)}
 TOPICS=list(dict.fromkeys(q['topic'] for q in BANK.values()))
 GROUPS=['A','B','C','D']
 MODEL={'prior':.24,'learn':.09,'slip':.12,'guess':.25,'guess_with_hint':.40,'version':'BKT-1.0-uncalibrated'}
