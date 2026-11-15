@@ -126,8 +126,17 @@
  async function teacherPanel(){
   const root=el('teacherContent');if(!root||root.querySelector('#microTeacherPackage'))return;
   const sec=document.createElement('section');sec.className='card elevate';sec.id='microTeacherPackage';
-  sec.innerHTML='<h2>MICRO ADAPTA-ITS · Materiales de Microeconomía I y II</h2><p>Importa el paquete curricular: 5.000 preguntas originales de Microeconomía I con solucionarios y figuras, 5.000 variantes paramétricas de Microeconomía II (requieren revisión docente), y apuntes bilingües de ambas asignaturas.</p><p class="muted-note">El archivo ZIP se carga únicamente desde la cuenta docente. Es posible volver a importarlo para actualizar contenidos; antes de sustituir material de una investigación en curso, conserva una copia de seguridad.</p><input id="microPackageInput" type="file" accept=".zip"><button id="microPackageUpload" class="btn btn-primary" type="button">Importar paquete curricular</button><div id="microPackageStatus" role="status"></div>';
+  sec.innerHTML='<h2>MICRO ADAPTA-ITS · Materiales de Microeconomía I y II</h2><p>Importa el paquete curricular: 5.000 preguntas originales de Microeconomía I con solucionarios y figuras, 5.000 variantes paramétricas de Microeconomía II (requieren revisión docente), y apuntes bilingües de ambas asignaturas.</p><p class="muted-note">El archivo ZIP se carga únicamente desde la cuenta docente. Es posible volver a importarlo para actualizar contenidos; antes de sustituir material de una investigación en curso, conserva una copia de seguridad.</p><input id="microPackageInput" type="file" accept=".zip"><button id="microPackageUpload" class="btn btn-primary" type="button">Importar paquete curricular</button><button id="microCourseCsv" class="btn btn-outline" type="button">Exportar resultados Micro I/II (CSV)</button><div id="microPackageStatus" role="status"></div>';
   root.appendChild(sec);
+  el('microCourseCsv').onclick=async()=>{
+   try{
+    const r=await fetch('/api/micro/teacher/export',{headers:{Authorization:'Bearer '+token}});
+    if(!r.ok)throw Error('Error de exportación');
+    const blob=await r.blob(),url=URL.createObjectURL(blob),a=document.createElement('a');
+    a.href=url;a.download='MICRO_ADAPTA_ITS_datos_asignaturas.csv';document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),1500);
+   }catch(err){el('microPackageStatus').textContent=err.message}
+  };
   el('microPackageUpload').onclick=async()=>{
    const f=el('microPackageInput').files[0],b=el('microPackageUpload'),dest=el('microPackageStatus');
    if(!f)return dest.textContent='Selecciona el archivo ZIP de contenidos.';
