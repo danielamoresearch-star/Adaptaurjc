@@ -48,6 +48,12 @@ with zipfile.ZipFile(io.BytesIO(resp.content)) as z:
   assert sheet in workbook,sheet
  assert len([n for n in z.namelist() if n.startswith('xl/worksheets/sheet') and n.endswith('.xml')])==10
 
+status=check(client.get('/api/micro/teacher/storage',headers=TH))
+assert 'persistent_disk_verified' in status
+backup=check(client.get('/api/micro/teacher/backup.sqlite3',headers=TH))
+assert backup.content.startswith(b'SQLite format 3'),backup.content[:32]
+check(client.get('/api/micro/teacher/backup.sqlite3',headers=SH),403)
+
 for asset in ['session_idle.js','micro_learning_ui.js','quality.css','icons.js']:
  check(client.get('/static/'+asset))
 
@@ -64,4 +70,4 @@ check(client.post('/api/session/activity',headers=SH),401)
 
 # Teacher access must remain active and be independent of student idle renewal.
 assert check(client.get('/api/me',headers=TH))['role']=='teacher'
-print('PASS: ten-sheet XLSX; curricular separation; session renewal; 15min server expiry; student/teacher permissions; responsive static assets')
+print('PASS: teacher backup; storage status; ten-sheet XLSX; curricular separation; session renewal; 15min server expiry; student/teacher permissions; responsive static assets')
