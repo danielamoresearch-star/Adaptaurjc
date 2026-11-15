@@ -2,10 +2,11 @@
 All metrics are computed from persisted activity; never fabricate exam marks,
 student session times, or causal learning gains. Restricted to teacher accounts.
 """
-import io,json,math,collections
+import io,json,math,collections,os,tempfile,sqlite3
 from datetime import datetime
 from fastapi import Header,HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse,FileResponse
+from starlette.background import BackgroundTask
 from pydantic import BaseModel,Field
 from excel_export import create_workbook
 from micro_course import CURRICULUM
@@ -61,6 +62,29 @@ def register(app,db,auth,iso,utc):
       (iso(now),addition,sid,data.course,data.session_id))
    return {'ok':True,'active_seconds':round(row['active_seconds']+addition,1)}
 
+ @app.get('/api/micro/teacher/storage')
+ def storage_status(authorization:str|None=Header(default=None)):
+  auth(authorization,True)
+  location=os.path.abspath(os.environ.get('ADAPTA_DB','adapta_v6.sqlite3'))
+  directory=os.path.dirname(location)
+  return {'database_size_mb':round(os.path.getsize(location)/1048576,2) if os.path.isfile(location) else 0,
+   'persistent_disk_verified':os.path.ismount(directory),
+   'warning':None if os.path.ismount(directory) else 'No se ha verificado un disco persistente para SQLite. Realiza copias y configura un almacenamiento persistente antes del uso en investigación.'}
+ @app.get('/api/micro/teacher/backup.sqlite3')
+ def teacher_db_backup(authorization:str|None=Header(default=None)):
+  auth(authorization,True)
+  file=tempfile.NamedTemporaryFile(delete=False,suffix='.sqlite3')
+  filename=file.name;file.close()
+  try:
+   with db() as source,sqlite3.connect(filename) as destination:
+    source.backup(destination)
+   return FileResponse(filename,media_type='application/vnd.sqlite3',
+    filename='MICRO_ADAPTA_ITS_respaldo.sqlite3',
+    headers={'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'},
+    background=BackgroundTask(lambda:os.unlink(filename)))
+  except Exception:
+   if os.path.isfile(filename):os.unlink(filename)
+   raise
  @app.get('/api/micro/teacher/export.xlsx')
  def export_research_excel(authorization:str|None=Header(default=None)):
   auth(authorization,True)
