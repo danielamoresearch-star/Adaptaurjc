@@ -21,12 +21,12 @@ Object.assign(lessons,{
 });
 async function request(url,{method='GET',body=null}={}){
   const res=await fetch(url,{method,headers:{...(body?{'Content-Type':'application/json'}:{}),...(token?{Authorization:'Bearer '+token}:{})},...(body?{body:JSON.stringify(body)}:{})});
-  if(!res.ok){let detail='Error HTTP '+res.status;try{const j=await res.json();detail=j.detail||detail}catch{}if(res.status===401 && token){sessionStorage.removeItem('adapta_v6_token');sessionStorage.removeItem('adapta_v6_role');token='';role='';showAuth()}throw Error(detail)}
+  if(!res.ok){let detail='Error HTTP '+res.status;try{const j=await res.json();detail=j.detail||detail}catch{}if(res.status===401 && token){window.adaptaExpireIdleSession?.(detail)}throw Error(detail)}
   return res;
 }
 function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');clearTimeout(toast.tm);toast.tm=setTimeout(()=>t.classList.remove('show'),3400)}
 function showAuth(){$('#auth').hidden=false;$('#app').hidden=true;$('#teacher').hidden=true;$('#mentorWidget').hidden=true;stopTimer()}
-function saveSession(res){token=res.token;role=res.role;sessionStorage.setItem('adapta_v6_token',token);sessionStorage.setItem('adapta_v6_role',role)}
+function saveSession(res){token=res.token;role=res.role;sessionStorage.setItem('adapta_v6_token',token);sessionStorage.setItem('adapta_v6_role',role);if(role==='student')window.adaptaIdleStart?.(true)}
 function roleSelect(r){authRole=r;document.querySelectorAll('[data-authrole]').forEach(x=>x.classList.toggle('is-on',x.dataset.authrole===r));$('#student-fields').hidden=r!=='student';$('#teacher-fields').hidden=r!=='teacher';$('#login-error').textContent=''}
 function initAuth(){document.querySelectorAll('[data-authrole]').forEach(b=>b.onclick=()=>roleSelect(b.dataset.authrole));$('#loginBtn').onclick=login;$('#accessPassword').addEventListener('keydown',e=>{if(e.key==='Enter')login()});$('#accessTeacher').addEventListener('keydown',e=>{if(e.key==='Enter')login()});}
 async function login(){const b=$('#loginBtn');b.disabled=true;$('#login-error').textContent='';try{
@@ -36,7 +36,17 @@ const res=await (await request('/api/'+(authRole==='teacher'?'teacher':'student'
 async function enter(){let data=await(await request('/api/me')).json();$('#auth').hidden=true;
 if(role==='teacher'){$('#app').hidden=true;$('#teacher').hidden=false;$('#mentorWidget').hidden=true;await renderTeacher();return}
 $('#teacher').hidden=true;$('#app').hidden=false;$('#mentorWidget').hidden=false;$('#profileBadge').textContent=data.code||'Estudiante';overview=await(await request('/api/overview')).json();navigate('courses');}
-function logout(){if(token)request('/api/logout',{method:'POST'}).catch(()=>{});token='';role='';active=null;feedback=null;sessionStorage.removeItem('adapta_v6_token');sessionStorage.removeItem('adapta_v6_role');showAuth()}
+function logout(){if(token)request('/api/logout',{method:'POST'}).catch(()=>{});token='';role='';active=null;feedback=null;sessionStorage.removeItem('adapta_v6_token');sessionStorage.removeItem('adapta_v6_role');window.adaptaIdleStop?.();showAuth()}
+window.adaptaSessionInfo=()=>({token,role});
+window.adaptaExpireIdleSession=(reason='Tu sesión ha caducado tras 15 minutos de inactividad. Inicia sesión de nuevo.')=>{
+  token='';role='';active=null;feedback=null;stopTimer();
+  try{if(novaAudio){novaAudio.pause();novaAudio=null};if('speechSynthesis' in window)speechSynthesis.cancel()}catch(e){}
+  sessionStorage.removeItem('adapta_v6_token');sessionStorage.removeItem('adapta_v6_role');
+  window.adaptaIdleStop?.();showAuth();
+  const error=document.querySelector('#login-error');if(error)error.textContent=reason;
+  const pass=document.querySelector('#accessPassword');if(pass)pass.value='';
+  const teacherpass=document.querySelector('#accessTeacher');if(teacherpass)teacherpass.value='';
+};
 function stopTimer(){if(timerHandle){clearInterval(timerHandle);timerHandle=null}}
 function event(type,details={},task_id){if(token&&role==='student')request('/api/event',{method:'POST',body:{event_type:type,details,task_id:task_id||undefined}}).catch(()=>{})}
 function closeMenu(){const bar=$('#sidebar');bar.classList.remove('open');$('#navScrim').hidden=true;$('#mobileMenu').setAttribute('aria-expanded','false');document.body.classList.remove('menu-open')}
