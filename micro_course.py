@@ -85,11 +85,12 @@ def register(app,db,auth,iso,utc):
     if len(q.get('options_'+lang,[]))!=4 or len(set(q['options_'+lang]))!=4 or not q.get('prompt_'+lang) or not q.get('explanation_'+lang):
      raise HTTPException(422,'Pregunta incompleta: '+qid)
   figures=jd('micro1/figures.json')
-  if len(figures)>250:raise HTTPException(413,'Demasiadas figuras')
+  if 'lessons/figures.json' in names:figures.update(jd('lessons/figures.json'))
+  if len(figures)>400:raise HTTPException(413,'Demasiadas figuras')
   for ident,obj in figures.items():
    if not re.fullmatch(r'fig_[a-f0-9]{14}',ident):raise HTTPException(422,'Código de figura incorrecto')
    svg=obj['svg']
-   if len(svg)>150000:raise HTTPException(413,'Figura demasiado grande')
+   if len(svg)>300000:raise HTTPException(413,'Figura demasiado grande')
    try:root=ElementTree.fromstring(svg)
    except ElementTree.ParseError:raise HTTPException(422,'SVG mal formado')
    for elem in root.iter():
