@@ -6,6 +6,7 @@
  const MODE_LABELS={teorica:'Teoría',rapida:'Cálculo rápido',grafica:'Interpretación gráfica',noticia:'Noticia económica',caso:'Caso de estudio'};
  let course='micro1',unit=1,modality='',current=null,started=0,language='es',catalog=null;
  const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+ const lessonPart=p=>'<div class="micro-lesson-part '+esc(p.type)+'">'+esc(p.text)+(p.figure_id?'<figure class="micro-figure"><img loading="lazy" src="/api/micro/figure/'+encodeURIComponent(p.figure_id)+'" alt="'+esc(p.text)+'"></figure>':'')+'</div>';
  const el=id=>document.getElementById(id);
  const parseJSON=async r=>{let d=await r.json();if(!r.ok)throw Error(typeof d.detail==='string'?d.detail:('Error HTTP '+r.status));return d};
  async function call(url,options={}){return parseJSON(await fetch(url,{...options,headers:{...options.headers,Authorization:'Bearer '+token}}))}
@@ -104,7 +105,7 @@
   slot.innerHTML='<div class="muted-note">Cargando apuntes…</div>';
   try{
    const d=await call('/api/micro/lesson?'+new URLSearchParams({course,unit:String(unit),lang:language}));
-   const htmlParts=d.sections.map((s,i)=>'<details class="micro-lesson-section" '+(i===0?'open':'')+'><summary>'+esc(s.heading)+'</summary>'+s.parts.map(p=>'<div class="micro-lesson-part '+esc(p.type)+'">'+esc(p.text).replace(/\n/g,'\n')+'</div>').join('')+'</details>').join('');
+   const htmlParts=d.sections.map((s,i)=>'<details class="micro-lesson-section" '+(i===0?'open':'')+'><summary>'+esc(s.heading)+'</summary>'+s.parts.map(p=>lessonPart(p)).join('')+'</details>').join('');
    slot.innerHTML='<div class="micro-lesson"><h3>'+esc(d.title)+'</h3><p class="muted-note">Apuntes de referencia del curso. Las ecuaciones están expresadas en LaTeX.</p>'+htmlParts+'</div>';window.adaptaTypeset?.();
   }catch(err){slot.innerHTML='<p class="muted-note">'+esc(err.message)+'</p>'}
  }
@@ -117,7 +118,7 @@
    slot.innerHTML='<div class="micro-lesson"><label for="microExtraSelect"><b>Selecciona un recurso de estudio</b></label><select id="microExtraSelect">'+resources.map((r,i)=>'<option value="'+i+'">'+esc(r.title)+'</option>').join('')+'</select><div id="microExtraText"></div></div>';
    const draw=()=>{
     const r=resources[Number(el('microExtraSelect').value)],box=el('microExtraText');if(!r||!box)return;
-    box.innerHTML='<h3>'+esc(r.title)+'</h3>'+r.sections.map((section,i)=>'<details class="micro-lesson-section" '+(i===0?'open':'')+'><summary>'+esc(section.heading)+'</summary>'+section.parts.map(part=>'<div class="micro-lesson-part '+esc(part.type)+'">'+esc(part.text)+'</div>').join('')+'</details>').join('');
+    box.innerHTML='<h3>'+esc(r.title)+'</h3>'+r.sections.map((section,i)=>'<details class="micro-lesson-section" '+(i===0?'open':'')+'><summary>'+esc(section.heading)+'</summary>'+section.parts.map(part=>lessonPart(part)).join('')+'</details>').join('');
     window.adaptaTypeset?.();
    };
    el('microExtraSelect').onchange=draw;draw();
