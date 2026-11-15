@@ -67,19 +67,20 @@ def register(app,db,auth,iso,utc):
   if not isinstance(manifest.get('courses'),dict):raise HTTPException(422,'Manifiesto incompleto')
   questions=[]
   for name in sorted(names):
-   if re.fullmatch(r'micro1/questions_\d\d\.json',name):
+   if re.fullmatch(r'micro[12]/questions_\d\d\.json',name):
     questions+=jd(name)
-  if len(questions)!=5000:raise HTTPException(422,'El paquete debe contener exactamente 5000 preguntas originales de Microeconomía I')
+  counts=Counter(q.get('course') for q in questions)
+  if counts.get('micro1')!=5000 or counts.get('micro2') not in (0,5000):raise HTTPException(422,'Número incorrecto de preguntas por asignatura')
   qids=set()
   for q in questions:
    qid=q.get('external_id','')
-   if not re.fullmatch(r'I-\d{4}',qid) or qid in qids:raise HTTPException(422,'Identificador duplicado/inválido')
+   if not re.fullmatch(r'I-\d{4}' if q.get('course')=='micro1' else r'II-\d{4}',qid) or qid in qids:raise HTTPException(422,'Identificador duplicado/inválido')
    qids.add(qid)
-   if q.get('course')!='micro1' or q.get('unit') not in (1,2,3) or q.get('modality') not in MODALITIES:
+   if q.get('course') not in CURRICULUM or q.get('unit') not in range(1,len(CURRICULUM[q['course']]['es'])+1) or q.get('modality') not in MODALITIES:
     raise HTTPException(422,'Asignación curricular incorrecta')
    if q.get('answer') not in (0,1,2,3):raise HTTPException(422,'Clave incorrecta')
    for lang in ('es','en'):
-    if len(q.get('options_'+lang,[]))!=4 or not q.get('prompt_'+lang) or not q.get('explanation_'+lang):
+    if len(q.get('options_'+lang,[]))!=4 or len(set(q['options_'+lang]))!=4 or not q.get('prompt_'+lang) or not q.get('explanation_'+lang):
      raise HTTPException(422,'Pregunta incompleta: '+qid)
   figures=jd('micro1/figures.json')
   if len(figures)>250:raise HTTPException(413,'Demasiadas figuras')
@@ -119,12 +120,12 @@ def register(app,db,auth,iso,utc):
   except HTTPException:raise
   except Exception:raise HTTPException(422,'No se pudo validar la estructura del paquete')
   with db() as c:
-   c.execute("DELETE FROM micro_bank WHERE course='micro1'")
-   c.executemany('INSERT INTO micro_bank VALUES(?,?,?,?,?,?)',[(q['external_id'],'micro1',q['unit'],q['modality'],json.dumps(q,ensure_ascii=False),iso()) for q in questions])
+   c.execute("DELETE FROM micro_bank WHERE course IN ('micro1','micro2')")
+   c.executemany('INSERT INTO micro_bank VALUES(?,?,?,?,?,?)',[(q['external_id'],q['course'],q['unit'],q['modality'],json.dumps(q,ensure_ascii=False),iso()) for q in questions])
    c.executemany('INSERT OR REPLACE INTO micro_figures VALUES(?,?,?)',[(k,v['svg'],v['caption']) for k,v in figures.items()])
    c.executemany('INSERT OR REPLACE INTO micro_lessons VALUES(?,?,?,?)',lessons)
-  return {'imported_questions':len(questions),'figures':len(figures),'lesson_units':len(lessons),'courses':['micro1','micro2'],
-   'notice':'Contenido cargado. Microeconomía II incorpora apuntes pero no un banco original de preguntas.'}
+  return {'imported_questions':len(questions),'imported_by_course':dict(Counter(q['course'] for q in questions)),'figures':len(figures),'lesson_units':len(lessons),'courses':['micro1','micro2'],
+   'notice':'Microeconomía I utiliza preguntas originales. Microeconomía II utiliza variantes paramétricas, sujetas a validación docente.'}
  @app.get('/api/micro/catalog')
  def catalog(authorization:str|None=Header(default=None)):
   auth(authorization)
