@@ -76,8 +76,10 @@ def register(app,db,auth,iso,utc):
   file=tempfile.NamedTemporaryFile(delete=False,suffix='.sqlite3')
   filename=file.name;file.close()
   try:
-   with db() as source,sqlite3.connect(filename) as destination:
-    source.backup(destination)
+   with db() as source:
+    destination=sqlite3.connect(filename)
+    try:source.backup(destination)
+    finally:destination.close()
    return FileResponse(filename,media_type='application/vnd.sqlite3',
     filename='MICRO_ADAPTA_ITS_respaldo.sqlite3',
     headers={'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'},
