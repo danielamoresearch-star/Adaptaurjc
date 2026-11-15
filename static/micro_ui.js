@@ -111,7 +111,7 @@
  async function teacherPanel(){
   const root=el('teacherContent');if(!root||root.querySelector('#microTeacherPackage'))return;
   const sec=document.createElement('section');sec.className='card elevate';sec.id='microTeacherPackage';
-  sec.innerHTML='<h2>MICRO ADAPTA-ITS · Materiales de Microeconomía I y II</h2><p>Importa el paquete curricular validado: 5.000 preguntas con respuestas y solucionarios, figuras económicas, y apuntes bilingües de Microeconomía I y II.</p><p class="muted-note">El archivo ZIP se carga únicamente desde la cuenta docente. Es posible volver a importarlo para actualizar contenidos; antes de sustituir material de una investigación en curso, conserva una copia de seguridad.</p><input id="microPackageInput" type="file" accept=".zip"><button id="microPackageUpload" class="btn btn-primary" type="button">Importar paquete curricular</button><div id="microPackageStatus" role="status"></div>';
+  sec.innerHTML='<h2>MICRO ADAPTA-ITS · Materiales de Microeconomía I y II</h2><p>Importa el paquete curricular: 5.000 preguntas originales de Microeconomía I con solucionarios y figuras, 5.000 variantes paramétricas de Microeconomía II (requieren revisión docente), y apuntes bilingües de ambas asignaturas.</p><p class="muted-note">El archivo ZIP se carga únicamente desde la cuenta docente. Es posible volver a importarlo para actualizar contenidos; antes de sustituir material de una investigación en curso, conserva una copia de seguridad.</p><input id="microPackageInput" type="file" accept=".zip"><button id="microPackageUpload" class="btn btn-primary" type="button">Importar paquete curricular</button><div id="microPackageStatus" role="status"></div>';
   root.appendChild(sec);
   el('microPackageUpload').onclick=async()=>{
    const f=el('microPackageInput').files[0],b=el('microPackageUpload'),dest=el('microPackageStatus');
@@ -121,7 +121,7 @@
    try{
     const form=new FormData();form.append('file',f);
     const data=await call('/api/micro/import',{method:'POST',body:form});
-    dest.textContent='Importados '+data.imported_questions+' ejercicios, '+data.figures+' figuras y '+data.lesson_units+' unidades bilingües. Microeconomía II no incluye un banco de test original.';
+    dest.textContent='Importados '+data.imported_questions+' ejercicios ('+JSON.stringify(data.imported_by_course||{})+'), '+data.figures+' figuras y '+data.lesson_units+' unidades bilingües. Los ejercicios paramétricos de Micro II requieren revisión docente.';
    }catch(e){dest.textContent=e.message}finally{b.disabled=false}
   };
  }
