@@ -2,10 +2,10 @@
 /* MICRO ADAPTA-ITS 2026-27: topic selection, mandatory diagnostic, notes & grounded NOVA. */
 (()=>{
  const $=id=>document.getElementById(id);
- const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','"':'&#39;'}[c]));
+ const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const NAMES={micro1:'Microeconomía I',micro2:'Microeconomía II'};
  const TYPES={teorica:'Teoría',rapida:'Cálculo rápido',grafica:'Análisis gráfico',noticia:'Noticia económica',caso:'Caso práctico'};
- let state={course:'micro1',unit:1,selected:new Set([1]),tab:'practice',kind:'',progress:null,catalog:null,lang:'es',question:null,t0:0,interval:null,noteId:null,noteSince:0,noteTimer:null,chat:[]};
+ let state={course:'micro1',unit:1,selected:new Set([1]),tab:'practice',kind:'',progress:null,catalog:null,lang:'es',question:null,t0:0,interval:null,noteId:null,noteSince:0,noteTimer:null,chat:[],sessionId:null,usageTimer:null};
  const api=async(url,opt={})=>{
   const headers={Authorization:'Bearer '+token,...(opt.headers||{})};
   let r=await fetch(url,{...opt,headers});
@@ -47,7 +47,7 @@
    '<nav class="ml-bottom" aria-label="Accesos rápidos del curso"><button data-mltab="practice">Practicar</button><button data-mltab="notes">Apuntes</button><button data-mltab="tutor">NOVA</button><button data-mltab="progress">Progreso</button></nav>';
  }
  function attachShell(){
-  $('mlAllCourses').onclick=()=>navigate('courses');
+  $('mlAllCourses').onclick=()=>{stopUsage();navigate('courses')};
   document.querySelectorAll('[data-mltab]').forEach(b=>b.onclick=()=>showTab(b.dataset.mltab));
  }
  function showTab(tab){
@@ -245,6 +245,18 @@
   }catch(err){state.chat.push({user:false,text:'No he podido consultar los apuntes: '+err.message});renderChat()}
   finally{btn.disabled=false}
  }
+ async function usagePulse(){
+  const name=typeof page==='string'?page:'';
+  if(document.hidden||!state.sessionId||name!==state.course||role!=='student')return;
+  try{await api('/api/micro/usage/pulse',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({course:state.course,session_id:state.sessionId,visible:true})})}catch(e){}
+ }
+ function stopUsage(){clearInterval(state.usageTimer);state.usageTimer=null;state.sessionId=null}
+ function startUsage(){
+  stopUsage();
+  state.sessionId=(window.crypto?.randomUUID?.()||('session_'+String(Date.now())+'_'+Math.random().toString(36).slice(2))).replaceAll('-','');
+  usagePulse();
+  state.usageTimer=setInterval(usagePulse,30000);
+ }
  async function refreshMeters(){
   try{state.progress=await api('/api/micro/progress?course='+state.course);
    const old=document.querySelector('.ml-summary');if(old){
@@ -258,18 +270,18 @@
  }
  document.addEventListener('DOMContentLoaded',()=>{
   $('mentorToggle')?.addEventListener('click',mentorClick,true);
-  document.addEventListener('visibilitychange',()=>{if(document.hidden)syncNotes()});
-  window.addEventListener('pagehide',()=>syncNotes());
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)syncNotes();else usagePulse()});
+  window.addEventListener('pagehide',()=>{syncNotes();stopUsage()});
  });
  async function drawCourse(c){
-  stopNotes();clearInterval(state.interval);
+  stopNotes();clearInterval(state.interval);stopUsage();
   state.course=c;state.lang=document.documentElement.lang==='en'?'en':'es';
   state.unit=1;state.kind='';state.tab='practice';state.question=null;state.selected=new Set([1]);state.chat=[];
   const root=$('content');if(!root)return;
   root.innerHTML='<section class="card"><p>Cargando el curso…</p></section>';
   try{
    [state.catalog,state.progress]=await Promise.all([api('/api/micro/catalog'),api('/api/micro/progress?course='+c)]);
-   redraw();showTab('practice');
+   redraw();showTab('practice');startUsage();
   }catch(e){root.innerHTML='<section class="card"><h2>'+esc(NAMES[c])+'</h2><p class="error-text">'+esc(e.message)+'</p><button class="btn" id="mlGoBack">Volver</button></section>';if($('mlGoBack'))$('mlGoBack').onclick=()=>navigate('courses')}
  }
  window.drawMicroCourse=drawCourse;
