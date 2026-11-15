@@ -69,6 +69,8 @@ def register(app,db,auth,iso,utc):
   unit:int=Field(ge=1,le=4)
   seconds:float=Field(ge=0,le=3600)
   kind:str='lesson'
+ class DurationEvent(BaseModel):
+  seconds:float=Field(ge=0,le=3600)
  class TutorPrompt(BaseModel):
   course:str
   unit:int=Field(ge=1,le=4)
@@ -367,9 +369,20 @@ def register(app,db,auth,iso,utc):
        ORDER BY id DESC LIMIT 1""",(sid,data.course,data.unit,data.kind)).fetchone()
    if recent and (utc()-datetime.fromisoformat(recent['viewed_at'])).total_seconds()<12:
     return {'logged':False,'notice':'La lectura reciente ya se registró.'}
-   c.execute("""INSERT INTO micro_notes_views(student_id,course,unit,kind,seconds,viewed_at)
+   cur=c.execute("""INSERT INTO micro_notes_views(student_id,course,unit,kind,seconds,viewed_at)
       VALUES(?,?,?,?,?,?)""",(sid,data.course,data.unit,data.kind,round(min(900,data.seconds),1),iso()))
-  return {'logged':True}
+   view_id=cur.lastrowid
+  return {'logged':True,'view_id':view_id}
+ @app.put('/api/micro/notes/duration/{view_id}')
+ def notes_duration(view_id:int,data:DurationEvent,authorization:str|None=Header(default=None)):
+  sid=student(authorization)
+  with db() as c:
+   row=c.execute('SELECT viewed_at FROM micro_notes_views WHERE id=? AND student_id=?',(view_id,sid)).fetchone()
+   if not row:raise HTTPException(404,'Sesión de lectura inexistente')
+   elapsed=(utc()-datetime.fromisoformat(row['viewed_at'])).total_seconds()
+   seconds=min(900,max(0,elapsed),data.seconds)
+   c.execute('UPDATE micro_notes_views SET seconds=MAX(seconds,?) WHERE id=?',(round(seconds,1),view_id))
+  return {'ok':True,'seconds':round(seconds,1)}
  @app.post('/api/micro/tutor')
  def tutor_reply(data:TutorPrompt,authorization:str|None=Header(default=None)):
   sid=student(authorization);must_course(data.course)
