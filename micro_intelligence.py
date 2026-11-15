@@ -84,17 +84,17 @@ def trained_network(c,course):
                       WHERE a.course=? AND a.finished_at IS NOT NULL
                         AND a.features_json IS NOT NULL AND s.group_name IN ('B','D')
                       ORDER BY a.finished_at DESC LIMIT 6000""",(course,)).fetchall()
- X=[];y=[];mask=[]
+ X=[];y=[];mask=[];student_ids=[]
  for row in records:
   try:
    features=json.loads(row['features_json'])
    if not isinstance(features,list) or len(features)!=6:continue
    X.append(features);y.append(int(row['correct']))
-   mask.append(int(row['student_id'])%5!=0)
+   mask.append(int(row['student_id'])%5!=0);student_ids.append(int(row['student_id']))
   except (ValueError,TypeError):pass
  if len(X)<160:return None,'BKT: insufficient features'
  X=np.array(X,dtype=float);y=np.array(y,dtype=float);mask=np.array(mask,dtype=bool)
- if sum(~mask)<25 or len(set(y[mask]))<2 or len(set(np.array([r['student_id'] for r in records])[~mask]))<3 or len(set(np.array([r['student_id'] for r in records])[mask]))<8:
+ if sum(~mask)<25 or len(set(y[mask]))<2 or len(set(np.array(student_ids)[~mask]))<3 or len(set(np.array(student_ids)[mask]))<8:
   return None,'BKT: insufficient independent student holdout'
  model=TwoHiddenMLP()
  model.train(X[mask],y[mask])
