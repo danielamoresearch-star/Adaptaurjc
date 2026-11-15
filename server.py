@@ -78,9 +78,10 @@ def auth(header,teacher=False):
             expired=True
         if expired:
             c.execute('DELETE FROM sessions WHERE token_hash=?',(th,))
-            raise HTTPException(401,'Sesión cerrada tras 15 minutos de inactividad. Vuelve a identificarte.')
-        if teacher and r['role']!='teacher':raise HTTPException(403,'Acceso exclusivo para el profesorado.')
-        return r
+    if expired:
+        raise HTTPException(401,'Sesión cerrada tras 15 minutos de inactividad. Vuelve a identificarte.')
+    if teacher and r['role']!='teacher':raise HTTPException(403,'Acceso exclusivo para el profesorado.')
+    return r
 
 def new_session(sid,role):
     token=secrets.token_urlsafe(42)
