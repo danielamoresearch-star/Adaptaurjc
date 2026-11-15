@@ -3,6 +3,7 @@ The supplied course archive is imported only by an authenticated teacher. A miss
 archive is reported as missing content rather than silently replaced by synthetic items.
 """
 import io,json,csv,random,secrets,zipfile,re,math
+from datetime import datetime
 from collections import Counter
 from xml.etree import ElementTree
 from fastapi import File,UploadFile,Header,HTTPException,Query
@@ -292,16 +293,48 @@ def register(app,db,auth,iso,utc):
   with db() as c:
    a=c.execute('SELECT * FROM micro_activities WHERE token=? AND student_id=?',(data.token,sid)).fetchone()
    if not a:raise HTTPException(404,'Actividad no encontrada')
-   if a['finished_at']:raise HTTPException(409,'Pregunta ya respondida')
+   if a['finished_at']:raise HTTPException(409,'Esta pregunta ya fue respondida')
    row=c.execute('SELECT payload FROM micro_bank WHERE id=?',(a['question_id'],)).fetchone()
    if not row:raise HTTPException(409,'Contenido actualizado por el docente')
    q=json.loads(row['payload'])
+   if data.answer>=len(q['options_'+a['lang']]):raise HTTPException(400,'Opción inválida')
    correct=int(data.answer==q['answer'])
-   c.execute('UPDATE micro_activities SET answer=?,finished_at=?,correct=?,elapsed_sec=? WHERE token=?',
-     (data.answer,iso(),correct,data.elapsed_sec,data.token))
+   unit=q['unit'];course=a['course']
+   mr=c.execute('SELECT posterior FROM micro_mastery WHERE student_id=? AND course=? AND unit=?',(sid,course,unit)).fetchone()
+   prior=float(mr['posterior']) if mr else PRIOR
+   history=c.execute("""SELECT COUNT(*) n,SUM(correct) hits FROM micro_activities a
+         JOIN micro_bank b ON a.question_id=b.id WHERE a.student_id=? AND a.course=?
+         AND b.unit=? AND a.finished_at IS NOT NULL""",(sid,course,unit)).fetchone()
+   n=history['n'];recent_accuracy=(history['hits']/n) if n else .5
+   reads=c.execute('SELECT count(*) n FROM micro_notes_views WHERE student_id=? AND course=? AND unit=?',(sid,course,unit)).fetchone()['n']
+   start=datetime.fromisoformat(a['started_at'])
+   elapsed=max(0.,min(86400.,(utc()-start).total_seconds()))
+   features=model_features(prior,int(q.get('level',2)),elapsed,recent_accuracy,n,reads)
+   group=c.execute('SELECT group_name FROM students WHERE id=?',(sid,)).fetchone()['group_name']
+   if group in ('B','D'):
+    after,version=posterior_update(c,course,prior,bool(correct),features,a['phase']=='diagnostic')
+   else:
+    after=bayesian_update(prior,bool(correct),learn=(a['phase']!='diagnostic'))
+    version='BKT-v2 control (tracking only)'
+   c.execute("""UPDATE micro_activities SET answer=?,finished_at=?,correct=?,
+       elapsed_sec=?,p_before=?,p_after=?,model_version=?,features_json=? WHERE token=?""",
+       (data.answer,iso(),correct,round(elapsed,2),prior,after,version,json.dumps(features),a['token']))
+   c.execute("""INSERT INTO micro_mastery(student_id,course,unit,posterior,updated_at)
+       VALUES(?,?,?,?,?) ON CONFLICT(student_id,course,unit) DO UPDATE
+       SET posterior=excluded.posterior,updated_at=excluded.updated_at""",(sid,course,unit,after,iso()))
    lang=a['lang']
-   return {'correct':bool(correct),'answer':q['answer'],'answer_text':q['options_'+lang][q['answer']],
-     'explanation':q['explanation_'+lang],'id':q['external_id']}
+   return {'correct':bool(correct),'answer':q['answer'],
+       'answer_text':q['options_'+lang][q['answer']],
+       'explanation':q['explanation_'+lang],
+       'id':q['external_id'],'course':course,'unit':unit,'phase':a['phase'],
+       'posterior_before':round(prior,4),'posterior_after':round(after,4),
+       'model_version':version,
+       'lesson_reference':{'course':course,'unit':unit},
+       'encouragement':('Buen trabajo. Comprueba la explicación y consolida el concepto.' if correct else
+                         'El error sirve para localizar el concepto que conviene repasar. Consulta los apuntes y vuelve a intentarlo.'
+                        ) if lang=='es' else
+                       ('Good work. Check the explanation to consolidate your learning.' if correct else
+                        'This result identifies a concept worth reviewing. Read the notes and try again.')}
  @app.get('/api/micro/teacher/export')
  def teacher_export(authorization:str|None=Header(default=None)):
   auth(authorization,True)
