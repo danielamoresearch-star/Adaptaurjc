@@ -356,11 +356,95 @@ def register(app,db,auth,iso,utc):
     writer.writerow(["'"+str(v) if isinstance(v,str) and v.startswith(('=','+','-','@')) else v for v in vals])
   data=output.getvalue().encode('utf-8-sig')
   return StreamingResponse(io.BytesIO(data),media_type='text/csv',headers={'Content-Disposition':'attachment; filename="micro_adapta_course_research.csv"','Cache-Control':'no-store'})
+ @app.post('/api/micro/notes/view')
+ def notes_view(data:NotesEvent,authorization:str|None=Header(default=None)):
+  sid=student(authorization);must_course(data.course)
+  if data.unit>len(CURRICULUM[data.course]['es']):raise HTTPException(400,'Tema desconocido')
+  if data.kind not in ('lesson','supplementary','tutor'):raise HTTPException(400,'Material desconocido')
+  with db() as c:
+   recent=c.execute("""SELECT viewed_at FROM micro_notes_views
+       WHERE student_id=? AND course=? AND unit=? AND kind=?
+       ORDER BY id DESC LIMIT 1""",(sid,data.course,data.unit,data.kind)).fetchone()
+   if recent and (utc()-datetime.fromisoformat(recent['viewed_at'])).total_seconds()<12:
+    return {'logged':False,'notice':'La lectura reciente ya se registró.'}
+   c.execute("""INSERT INTO micro_notes_views(student_id,course,unit,kind,seconds,viewed_at)
+      VALUES(?,?,?,?,?,?)""",(sid,data.course,data.unit,data.kind,round(min(900,data.seconds),1),iso()))
+  return {'logged':True}
+ @app.post('/api/micro/tutor')
+ def tutor_reply(data:TutorPrompt,authorization:str|None=Header(default=None)):
+  sid=student(authorization);must_course(data.course)
+  if data.unit>len(CURRICULUM[data.course]['es']):raise HTTPException(400,'Tema inválido')
+  lang=must_lang(data.lang)
+  with db() as c:
+   r=c.execute('SELECT payload FROM micro_lessons WHERE course=? AND lang=? AND unit=?',
+       (data.course,lang,data.unit)).fetchone()
+   if not r:raise HTTPException(404,'El docente todavía no ha cargado los apuntes de este tema')
+   lesson=json.loads(r['payload'])
+   answer=grounded_tutor(lesson,data.text,lang)
+   last=c.execute("""SELECT b.payload FROM micro_activities a JOIN micro_bank b ON a.question_id=b.id
+           WHERE a.student_id=? AND a.course=? AND b.unit=? AND a.correct=0
+           ORDER BY a.finished_at DESC LIMIT 1""",(sid,data.course,data.unit)).fetchone()
+   mastery=c.execute('SELECT posterior FROM micro_mastery WHERE student_id=? AND course=? AND unit=?',
+                    (sid,data.course,data.unit)).fetchone()
+   prob=round(mastery['posterior'],4) if mastery else PRIOR
+   if last:
+    q=json.loads(last['payload'])
+    answer['recent_error_reference']=q.get('external_id','')
+    if lang=='es':answer['suggestion']='Repasa esta sección y practica después un ejercicio similar para consolidar lo aprendido.'
+    else:answer['suggestion']='Review this section and then try a similar exercise to consolidate the concept.'
+   else:
+    answer['suggestion']=('Puedes poner a prueba esta explicación con una nueva pregunta del tema.'
+      if lang=='es' else 'Try a new question from this topic to check your understanding.')
+   clean=re.sub(r'[\w.+-]+@[\w.-]+','[email]',data.text)[:500]
+   c.execute("""INSERT INTO micro_tutor_log(student_id,course,unit,asked_at,question,source_heading,matched)
+          VALUES(?,?,?,?,?,?,?)""",(sid,data.course,data.unit,iso(),clean,answer.get('section'),int(answer['matched'])))
+  answer['estimated_mastery']=prob
+  answer['course']=data.course;answer['unit']=data.unit
+  answer['note']='Respuesta recuperada de los apuntes originales; no se ha generado una conclusión económica nueva.'
+  return answer
  @app.get('/api/micro/progress')
  def progress(course:str='micro1',authorization:str|None=Header(default=None)):
   sid=student(authorization);must_course(course)
+  maximum=len(CURRICULUM[course]['es'])
   with db() as c:
-   rows=c.execute("""SELECT b.unit,COUNT(*) attempts,SUM(a.correct) correct,AVG(a.elapsed_sec) avg_seconds
-                     FROM micro_activities a JOIN micro_bank b ON b.id=a.question_id
-                     WHERE a.student_id=? AND a.course=? AND a.finished_at IS NOT NULL GROUP BY b.unit""",(sid,course)).fetchall()
-  return {'course':course,'units':{str(r['unit']):{'attempts':r['attempts'],'correct':r['correct'],'avg_seconds':round(r['avg_seconds'] or 0,2)} for r in rows}}
+   results=c.execute("""SELECT b.unit,COUNT(*) attempts,SUM(a.correct) correct,
+          AVG(a.elapsed_sec) avg_seconds,SUM(a.elapsed_sec) total_seconds
+          FROM micro_activities a JOIN micro_bank b ON b.id=a.question_id
+          WHERE a.student_id=? AND a.course=? AND a.finished_at IS NOT NULL
+          GROUP BY b.unit""",(sid,course)).fetchall()
+   mastery={r['unit']:round(r['posterior'],4) for r in c.execute(
+      'SELECT unit,posterior FROM micro_mastery WHERE student_id=? AND course=?',(sid,course))}
+   views=c.execute("""SELECT unit,COUNT(*) notes_views,SUM(seconds) study_seconds
+           FROM micro_notes_views WHERE student_id=? AND course=? GROUP BY unit""",(sid,course)).fetchall()
+   reads={r['unit']:{'notes_views':r['notes_views'],'study_seconds':round(r['study_seconds'] or 0,1)} for r in views}
+   diag=c.execute("""SELECT b.unit FROM micro_activities a JOIN micro_bank b ON a.question_id=b.id
+            WHERE a.student_id=? AND a.course=? AND a.phase='diagnostic'
+            AND a.finished_at IS NOT NULL GROUP BY b.unit""",(sid,course)).fetchall()
+   passed={r['unit'] for r in diag}
+   mode=c.execute('SELECT group_name FROM students WHERE id=?',(sid,)).fetchone()
+   last=c.execute("""SELECT a.question_id,a.correct,b.unit,a.p_before,a.p_after,a.elapsed_sec
+        FROM micro_activities a JOIN micro_bank b ON a.question_id=b.id
+        WHERE a.student_id=? AND a.course=? AND a.finished_at IS NOT NULL
+        ORDER BY a.finished_at DESC LIMIT 8""",(sid,course)).fetchall()
+  rmap={r['unit']:dict(r) for r in results}
+  units={}
+  for u in range(1,maximum+1):
+   r=rmap.get(u,{})
+   n=r.get('attempts',0) or 0;correct=r.get('correct',0) or 0
+   read=reads.get(u,{'notes_views':0,'study_seconds':0})
+   mean=r.get('avg_seconds',0) or 0
+   participation=round(100*(.58*min(1,n/14)+.27*min(1,read['notes_views']/3)+.15*min(1,(mean*n+read['study_seconds'])/600)))
+   units[str(u)]={'attempts':n,'correct':correct,'accuracy':round(100*correct/n,1) if n else None,
+     'avg_seconds':round(mean,2),'mastery':mastery.get(u,PRIOR),
+     'notes_views':read['notes_views'],'study_seconds':read['study_seconds'],
+     'participation_pct':min(100,participation),
+     'diagnostic_complete':u in passed}
+  total_attempts=sum(v['attempts'] for v in units.values())
+  total_reads=sum(v['notes_views'] for v in units.values())
+  return {'course':course,'diagnostic_count':len(passed),'diagnostic_total':maximum,
+    'diagnostic_complete':len(passed)==maximum,'units':units,
+    'total_attempts':total_attempts,'total_notes_views':total_reads,
+    'participation_pct':round(sum(v['participation_pct'] for v in units.values())/maximum),
+    'estimated_mastery_pct':round(100*sum(v['mastery'] for v in units.values())/maximum),
+    'recent':[dict(x) for x in last],
+    'selection_policy':'adaptive' if mode and mode['group_name'] in ('B','D') else 'control'}
