@@ -127,7 +127,7 @@
  async function teacherPanel(){
   const root=el('teacherContent');if(!root||root.querySelector('#microTeacherPackage'))return;
   const sec=document.createElement('section');sec.className='card elevate';sec.id='microTeacherPackage';
-  sec.innerHTML='<h2>MICRO ADAPTA-ITS · Materiales de Microeconomía I y II</h2><p>Importa el paquete curricular: 5.000 preguntas originales de Microeconomía I con solucionarios y figuras, 5.000 variantes paramétricas de Microeconomía II (requieren revisión docente), y apuntes bilingües de ambas asignaturas.</p><p class="muted-note">El archivo ZIP se carga únicamente desde la cuenta docente. Es posible volver a importarlo para actualizar contenidos; antes de sustituir material de una investigación en curso, conserva una copia de seguridad.</p><input id="microPackageInput" type="file" accept=".zip"><button id="microPackageUpload" class="btn btn-primary" type="button">Importar paquete curricular</button><button id="microCourseCsv" class="btn btn-outline" type="button">Exportar resultados Micro I/II (CSV)</button><button id="microBackupDb" class="btn btn-outline" type="button">Descargar copia de seguridad</button><div id="microStorageStatus" class="muted-note" role="status">Verificando la persistencia de los datos…</div><div id="microPackageStatus" role="status"></div>';
+  sec.innerHTML='<h2>MICRO ADAPTA-ITS · Materiales de Microeconomía I y II</h2><p>Importa el paquete curricular: 5.000 preguntas originales de Microeconomía I con solucionarios y figuras, 5.000 variantes paramétricas de Microeconomía II (requieren revisión docente), y apuntes bilingües de ambas asignaturas.</p><p class="muted-note">El archivo ZIP se carga únicamente desde la cuenta docente. Es posible volver a importarlo para actualizar contenidos; antes de sustituir material de una investigación en curso, conserva una copia de seguridad.</p><input id="microPackageInput" type="file" accept=".zip"><button id="microPackageUpload" class="btn btn-primary" type="button">Importar paquete curricular</button><button id="microCourseCsv" class="btn btn-outline" type="button">Exportar resultados Micro I/II (CSV)</button><button id="microBackupDb" class="btn btn-outline" type="button">Descargar copia de seguridad</button><button id="microValidateModels" class="btn btn-soft" type="button">Auditar modelo bayesiano y neuronal</button><div id="microValidationStatus" class="muted-note" role="status"></div><div id="microStorageStatus" class="muted-note" role="status">Verificando la persistencia de los datos…</div><div id="microPackageStatus" role="status"></div>';
   root.appendChild(sec);
   try{
    const data=await call('/api/micro/teacher/storage');
@@ -135,6 +135,17 @@
     'AVISO: almacenamiento persistente no verificado. Descarga copias de seguridad y configura un disco persistente en Render antes de recopilar datos reales.';
    const status=el('microStorageStatus');if(status){status.textContent=message;status.classList.toggle('error-text',!data.persistent_disk_verified)}
   }catch(err){const status=el('microStorageStatus');if(status)status.textContent='No se ha podido comprobar el almacenamiento: '+err.message}
+  el('microValidateModels').onclick=async()=>{
+   const box=el('microValidationStatus');box.textContent='Contrastando predicción BKT y MLP en estudiantes reservados para validación…';
+   try{
+    const data=await call('/api/micro/teacher/model-validation');
+    box.textContent=data.reports.map(r=>{
+     const course=r.course==='micro1'?'Micro I':'Micro II';
+     if(!r.models)return course+': '+r.observations+' respuestas de '+r.students+' estudiantes; muestra insuficiente para validar la red.';
+     return course+': '+r.recommended_model+'; Brier BKT '+r.models.BKT.brier+', Brier MLP '+r.models.MLP_16_8.brier+'; n de validación '+r.held_out_observations+'.';
+    }).join(' | ')+' Las métricas predictivas no demuestran una mejora causal del rendimiento.';
+   }catch(e){box.textContent='No se ha podido validar: '+e.message}
+  };
   el('microBackupDb').onclick=async()=>{
    try{
     const r=await fetch('/api/micro/teacher/backup.sqlite3',{headers:{Authorization:'Bearer '+token},cache:'no-store'});
