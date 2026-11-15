@@ -127,8 +127,23 @@
  async function teacherPanel(){
   const root=el('teacherContent');if(!root||root.querySelector('#microTeacherPackage'))return;
   const sec=document.createElement('section');sec.className='card elevate';sec.id='microTeacherPackage';
-  sec.innerHTML='<h2>MICRO ADAPTA-ITS · Materiales de Microeconomía I y II</h2><p>Importa el paquete curricular: 5.000 preguntas originales de Microeconomía I con solucionarios y figuras, 5.000 variantes paramétricas de Microeconomía II (requieren revisión docente), y apuntes bilingües de ambas asignaturas.</p><p class="muted-note">El archivo ZIP se carga únicamente desde la cuenta docente. Es posible volver a importarlo para actualizar contenidos; antes de sustituir material de una investigación en curso, conserva una copia de seguridad.</p><input id="microPackageInput" type="file" accept=".zip"><button id="microPackageUpload" class="btn btn-primary" type="button">Importar paquete curricular</button><button id="microCourseCsv" class="btn btn-outline" type="button">Exportar resultados Micro I/II (CSV)</button><div id="microPackageStatus" role="status"></div>';
+  sec.innerHTML='<h2>MICRO ADAPTA-ITS · Materiales de Microeconomía I y II</h2><p>Importa el paquete curricular: 5.000 preguntas originales de Microeconomía I con solucionarios y figuras, 5.000 variantes paramétricas de Microeconomía II (requieren revisión docente), y apuntes bilingües de ambas asignaturas.</p><p class="muted-note">El archivo ZIP se carga únicamente desde la cuenta docente. Es posible volver a importarlo para actualizar contenidos; antes de sustituir material de una investigación en curso, conserva una copia de seguridad.</p><input id="microPackageInput" type="file" accept=".zip"><button id="microPackageUpload" class="btn btn-primary" type="button">Importar paquete curricular</button><button id="microCourseCsv" class="btn btn-outline" type="button">Exportar resultados Micro I/II (CSV)</button><button id="microBackupDb" class="btn btn-outline" type="button">Descargar copia de seguridad</button><div id="microStorageStatus" class="muted-note" role="status">Verificando la persistencia de los datos…</div><div id="microPackageStatus" role="status"></div>';
   root.appendChild(sec);
+  try{
+   const data=await call('/api/micro/teacher/storage');
+   const message=data.persistent_disk_verified?'Disco persistente detectado. Tamaño de la base de datos: '+data.database_size_mb+' MB.':
+    'AVISO: almacenamiento persistente no verificado. Descarga copias de seguridad y configura un disco persistente en Render antes de recopilar datos reales.';
+   const status=el('microStorageStatus');if(status){status.textContent=message;status.classList.toggle('error-text',!data.persistent_disk_verified)}
+  }catch(err){const status=el('microStorageStatus');if(status)status.textContent='No se ha podido comprobar el almacenamiento: '+err.message}
+  el('microBackupDb').onclick=async()=>{
+   try{
+    const r=await fetch('/api/micro/teacher/backup.sqlite3',{headers:{Authorization:'Bearer '+token},cache:'no-store'});
+    if(!r.ok)throw Error('No se pudo realizar el respaldo.');
+    const blob=await r.blob();const u=URL.createObjectURL(blob);const a=document.createElement('a');
+    a.href=u;a.download='MICRO_ADAPTA_ITS_respaldo.sqlite3';document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(u),2000);
+   }catch(err){const x=el('microStorageStatus');if(x)x.textContent=err.message}
+  };
   el('microCourseCsv').onclick=async()=>{
    try{
     const r=await fetch('/api/micro/teacher/export',{headers:{Authorization:'Bearer '+token}});
