@@ -30,6 +30,8 @@ def register(app,db,auth,iso,utc):
   CREATE INDEX IF NOT EXISTS idx_micro_course_unit ON micro_bank(course,unit);
   CREATE TABLE IF NOT EXISTS micro_figures(
    id TEXT PRIMARY KEY,svg TEXT NOT NULL,caption TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS micro_supplementary(
+   course TEXT NOT NULL,lang TEXT NOT NULL,payload TEXT NOT NULL,PRIMARY KEY(course,lang));
   CREATE TABLE IF NOT EXISTS micro_lessons(
    course TEXT NOT NULL,lang TEXT NOT NULL,unit INTEGER NOT NULL,payload TEXT NOT NULL,
    PRIMARY KEY(course,lang,unit));
@@ -108,7 +110,15 @@ def register(app,db,auth,iso,utc):
      unit=entry.get('unit')
      if unit not in range(1,len(entries)+1):raise HTTPException(422,'Unidad no válida')
      lessons.append((course,lang,unit,json.dumps(entry,ensure_ascii=False)))
-  return questions,figures,lessons
+  supplements=[]
+  for course in CURRICULUM:
+   for lang in ('es','en'):
+    path=f'lessons/supplementary_{course}_{lang}.json'
+    if path in names:
+     sections=jd(path)
+     if not isinstance(sections,list) or len(sections)>30:raise HTTPException(422,'Recursos complementarios no válidos')
+     supplements.append((course,lang,json.dumps(sections,ensure_ascii=False)))
+  return questions,figures,lessons,supplements
  @app.post('/api/micro/import')
  async def import_package(file:UploadFile=File(...),authorization:str|None=Header(default=None)):
   auth(authorization,True)
@@ -116,7 +126,7 @@ def register(app,db,auth,iso,utc):
    raise HTTPException(400,'Se requiere el paquete ZIP de MICRO ADAPTA-ITS')
   raw=await file.read(MAX_UPLOAD+1)
   if len(raw)>MAX_UPLOAD:raise HTTPException(413,'Paquete superior a 12 MB')
-  try:questions,figures,lessons=read_archive(raw)
+  try:questions,figures,lessons,supplements=read_archive(raw)
   except HTTPException:raise
   except Exception:raise HTTPException(422,'No se pudo validar la estructura del paquete')
   with db() as c:
@@ -124,7 +134,8 @@ def register(app,db,auth,iso,utc):
    c.executemany('INSERT INTO micro_bank VALUES(?,?,?,?,?,?)',[(q['external_id'],q['course'],q['unit'],q['modality'],json.dumps(q,ensure_ascii=False),iso()) for q in questions])
    c.executemany('INSERT OR REPLACE INTO micro_figures VALUES(?,?,?)',[(k,v['svg'],v['caption']) for k,v in figures.items()])
    c.executemany('INSERT OR REPLACE INTO micro_lessons VALUES(?,?,?,?)',lessons)
-  return {'imported_questions':len(questions),'imported_by_course':dict(Counter(q['course'] for q in questions)),'figures':len(figures),'lesson_units':len(lessons),'courses':['micro1','micro2'],
+   c.executemany('INSERT OR REPLACE INTO micro_supplementary VALUES(?,?,?)',supplements)
+  return {'imported_questions':len(questions),'imported_by_course':dict(Counter(q['course'] for q in questions)),'figures':len(figures),'lesson_units':len(lessons),'supplementary_languages':len(supplements),'courses':['micro1','micro2'],
    'notice':'Microeconomía I utiliza preguntas originales. Microeconomía II utiliza variantes paramétricas, sujetas a validación docente.'}
  @app.get('/api/micro/catalog')
  def catalog(authorization:str|None=Header(default=None)):
@@ -140,6 +151,12 @@ def register(app,db,auth,iso,utc):
   with db() as c:r=c.execute('SELECT payload FROM micro_lessons WHERE course=? AND lang=? AND unit=?',(course,lang,unit)).fetchone()
   if not r:raise HTTPException(404,'Apuntes pendientes de carga docente')
   return json.loads(r['payload'])
+ @app.get('/api/micro/supplementary')
+ def supplementary(course:str='micro1',lang:str='es',authorization:str|None=Header(default=None)):
+  auth(authorization);must_course(course);lang=must_lang(lang)
+  with db() as c:r=c.execute('SELECT payload FROM micro_supplementary WHERE course=? AND lang=?',(course,lang)).fetchone()
+  if not r:raise HTTPException(404,'Material complementario pendiente de carga')
+  return {'resources':json.loads(r['payload'])}
  @app.get('/api/micro/figure/{fid}')
  def figure(fid:str):
   if not re.fullmatch(r'fig_[a-f0-9]{14}',fid):raise HTTPException(404)
