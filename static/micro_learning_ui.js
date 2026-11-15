@@ -10,6 +10,7 @@
   const headers={Authorization:'Bearer '+token,...(opt.headers||{})};
   let r=await fetch(url,{...opt,headers});
   let d=await r.json().catch(()=>({detail:'Respuesta del servidor no interpretable'}));
+  if(r.status===401 && window.adaptaExpireIdleSession){window.adaptaExpireIdleSession(typeof d.detail==='string'?d.detail:'Tu sesión ha caducado.');throw Error('Debes iniciar sesión de nuevo.')}
   if(!r.ok)throw Error(typeof d.detail==='string'?d.detail:'Error HTTP '+r.status);
   return d
  };
@@ -247,7 +248,7 @@
  }
  async function usagePulse(){
   const name=typeof page==='string'?page:'';
-  if(document.hidden||!state.sessionId||name!==state.course||role!=='student')return;
+  if(document.hidden||!state.sessionId||name!==state.course||role!=='student'||(window.adaptaSecondsSinceInteraction?.()??Infinity)>90)return;
   try{await api('/api/micro/usage/pulse',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({course:state.course,session_id:state.sessionId,visible:true})})}catch(e){}
  }
  function stopUsage(){clearInterval(state.usageTimer);state.usageTimer=null;state.sessionId=null}
