@@ -47,22 +47,60 @@ def initialize():
         ''')
 initialize()
 
+# One-off upgrade: old ten-hour sessions are revoked so they cannot bypass the
+# stricter 15-minute student inactivity policy introduced in v11.
+with database() as _c:
+    _session_cols={r['name'] for r in _c.execute('PRAGMA table_info(sessions)')}
+    if 'last_active_at' not in _session_cols:
+        _c.execute('ALTER TABLE sessions ADD COLUMN last_active_at TEXT')
+        _c.execute('DELETE FROM sessions WHERE role=?',('student',))
+        # Existing teacher sessions retain their original absolute expiry.
+
+STUDENT_IDLE_TIMEOUT=timedelta(minutes=15)
+
 def event(c,student_id,event_type,task=None,details=None):
     c.execute('INSERT INTO events(student_id,task_id,ts,event_type,details) VALUES(?,?,?,?,?)',(student_id,task,iso(),event_type,json.dumps(details or {},ensure_ascii=False)[:3000]))
 
 def auth(header,teacher=False):
     if not header or not header.startswith('Bearer '):raise HTTPException(401,'Es necesario iniciar sesión.')
+    th=sha(header[7:])
     with database() as c:
-        r=c.execute('SELECT * FROM sessions WHERE token_hash=?',(sha(header[7:]),)).fetchone()
-    if r is None or r['expires_at']<iso():raise HTTPException(401,'Sesión caducada. Vuelve a acceder.')
-    if teacher and r['role']!='teacher':raise HTTPException(403,'Acceso exclusivo para el profesorado.')
-    return r
+        r=c.execute('SELECT * FROM sessions WHERE token_hash=?',(th,)).fetchone()
+        if r is None:raise HTTPException(401,'Sesión caducada. Vuelve a iniciar sesión.')
+        now=utc()
+        expired=False
+        try:
+            expired=datetime.fromisoformat(r['expires_at'])<=now
+            if r['role']=='student':
+                last=datetime.fromisoformat(r['last_active_at']) if r['last_active_at'] else now-STUDENT_IDLE_TIMEOUT
+                expired=expired or now-last>=STUDENT_IDLE_TIMEOUT
+        except (ValueError,TypeError):
+            expired=True
+        if expired:
+            c.execute('DELETE FROM sessions WHERE token_hash=?',(th,))
+            raise HTTPException(401,'Sesión cerrada tras 15 minutos de inactividad. Vuelve a identificarte.')
+        if teacher and r['role']!='teacher':raise HTTPException(403,'Acceso exclusivo para el profesorado.')
+        return r
 
 def new_session(sid,role):
     token=secrets.token_urlsafe(42)
-    expires=iso(utc()+timedelta(hours=10))
-    with database() as c:c.execute('INSERT INTO sessions VALUES(?,?,?,?)',(sha(token),sid,role,expires))
-    return {'token':token,'role':role,'expires':expires}
+    now=utc()
+    expires=iso(now+(STUDENT_IDLE_TIMEOUT if role=='student' else timedelta(hours=10)))
+    with database() as c:
+        c.execute('INSERT INTO sessions(token_hash,student_id,role,expires_at,last_active_at) VALUES(?,?,?,?,?)',
+            (sha(token),sid,role,expires,iso(now)))
+    return {'token':token,'role':role,'expires':expires,'idle_timeout_seconds':900 if role=='student' else None}
+
+@app.post('/api/session/activity')
+def refresh_student_activity(authorization:str|None=Header(default=None)):
+    session=auth(authorization)
+    if session['role']!='student':return {'ok':True,'role':'teacher'}
+    now=utc()
+    expires=iso(now+STUDENT_IDLE_TIMEOUT)
+    with database() as c:
+        c.execute('UPDATE sessions SET last_active_at=?,expires_at=? WHERE token_hash=?',
+            (iso(now),expires,sha(authorization[7:])))
+    return {'ok':True,'expires':expires,'idle_timeout_seconds':900}
 
 class TeacherLogin(BaseModel):password:str
 @app.post('/api/teacher/login')
