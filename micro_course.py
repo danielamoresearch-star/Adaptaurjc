@@ -197,36 +197,95 @@ def register(app,db,auth,iso,utc):
   if not r:raise HTTPException(404)
   return Response(r['svg'],media_type='image/svg+xml',headers={'Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; sandbox",'X-Content-Type-Options':'nosniff'})
  @app.get('/api/micro/next')
- def next_question(course:str='micro1',unit:int=Query(ge=1,le=4),modality:str='',lang:str='es',authorization:str|None=Header(default=None)):
+ def next_question(course:str='micro1',unit:int=Query(default=1,ge=1,le=4),
+                   units:str='',modality:str='',lang:str='es',phase:str='practice',
+                   authorization:str|None=Header(default=None)):
   sid=student(authorization);must_course(course);lang=must_lang(lang)
-  if unit>len(CURRICULUM[course]['es']):raise HTTPException(400,'Tema inexistente')
+  if phase not in ('diagnostic','practice'):raise HTTPException(400,'Fase no reconocida')
   if modality and modality not in MODALITIES:raise HTTPException(400,'Modalidad desconocida')
+  maximum=len(CURRICULUM[course]['es'])
+  if units and not re.fullmatch(r'[1-4](,[1-4])*',units):raise HTTPException(400,'Temas inválidos')
+  selected=sorted({int(v) for v in units.split(',')}) if units else [unit]
+  if any(v<1 or v>maximum for v in selected):raise HTTPException(400,'Tema fuera del temario')
   with db() as c:
-   rows=c.execute('SELECT id,payload FROM micro_bank WHERE course=? AND unit=?'+(' AND modality=?' if modality else ''),
-       (course,unit,modality) if modality else (course,unit)).fetchall()
-   if not rows:return {'available':False,'message':'Este banco no está cargado; solicita al docente que importe el corpus.'}
-   recent={r['question_id'] for r in c.execute('SELECT question_id FROM micro_activities WHERE student_id=? AND course=? ORDER BY started_at DESC LIMIT 150',(sid,course))}
-   fresh=[r for r in rows if r['id'] not in recent]
+   diag=c.execute("""SELECT b.unit,COUNT(*) n FROM micro_activities a
+                     JOIN micro_bank b ON a.question_id=b.id
+                     WHERE a.student_id=? AND a.course=? AND a.phase='diagnostic'
+                       AND a.finished_at IS NOT NULL GROUP BY b.unit""",(sid,course)).fetchall()
+   diag_done={r['unit'] for r in diag}
+   if phase=='practice' and len(diag_done)<maximum:
+    raise HTTPException(409,'Completa primero el diagnóstico inicial: una pregunta por cada tema.')
+   if phase=='diagnostic':
+    missing=[u for u in range(1,maximum+1) if u not in diag_done]
+    if not missing:return {'complete':True,'diagnostic_complete':True}
+    selected=[missing[0]]
+    modality=''
+   outstanding=c.execute("""SELECT a.*,b.unit,b.payload FROM micro_activities a
+                            JOIN micro_bank b ON a.question_id=b.id
+                            WHERE a.student_id=? AND a.course=? AND a.phase=?
+                             AND a.finished_at IS NULL ORDER BY a.started_at DESC LIMIT 1""",(sid,course,phase)).fetchone()
+   if outstanding and outstanding['unit'] in selected:
+    q=json.loads(outstanding['payload'])
+    return {'available':True,'token':outstanding['token'],'id':q['external_id'],
+     'course':course,'unit':outstanding['unit'],'modality':q['modality'],
+     'level':q['level'],'prompt':q['prompt_'+lang],
+     'options':q['options_'+lang],'figure_id':q.get('figure_id'),
+     'source':q.get('source',''),'phase':phase,'resumed':True}
+   placeholders=','.join('?' for _ in selected)
+   query="SELECT id,unit,modality,payload FROM micro_bank WHERE course=? AND unit IN ("+placeholders+")"
+   args=[course]+selected
+   if modality and phase=='practice':
+    query+=' AND modality=?';args.append(modality)
+   if phase=='diagnostic':query+=" AND modality='teorica'"
+   rows=c.execute(query,args).fetchall()
+   if phase=='diagnostic':
+    low_level=[r for r in rows if json.loads(r['payload']).get('level',1)==1]
+    if low_level:rows=low_level
+   if not rows:return {'available':False,'message':'No hay preguntas de esta modalidad cargadas para el tema.'}
+   recent={r['question_id'] for r in c.execute("""SELECT question_id FROM micro_activities
+               WHERE student_id=? AND course=? ORDER BY started_at DESC LIMIT 150""",(sid,course))}
+   candidates=[r for r in rows if r['id'] not in recent] or rows
    group=c.execute('SELECT group_name FROM students WHERE id=?',(sid,)).fetchone()
    treatment=bool(group and group['group_name'] in ('B','D'))
-   policy='adaptive-tier-v1' if treatment else 'random-v1'
-   candidates=fresh or rows
-   if treatment:
-    history=c.execute("""SELECT a.correct FROM micro_activities a JOIN micro_bank q ON a.question_id=q.id
-                         WHERE a.student_id=? AND a.course=? AND q.unit=? AND a.finished_at IS NOT NULL
-                         ORDER BY a.finished_at DESC LIMIT 30""",(sid,course,unit)).fetchall()
-    accuracy=sum(x['correct'] for x in history)/len(history) if history else 0
-    desired=1 if len(history)<3 or accuracy<.55 else 2 if accuracy<.83 else 3
-    levels=[json.loads(x['payload'])['level'] for x in candidates]
-    min_gap=min(abs(level-desired) for level in levels)
-    candidates=[r for r,level in zip(candidates,levels) if abs(level-desired)==min_gap]
+   policy='diagnostic-random-v1' if phase=='diagnostic' else ('adaptive-bkt-weakness-v2' if treatment else 'control-random-v2')
+   if treatment and phase=='practice':
+    mastery={r['unit']:r['posterior'] for r in c.execute("""SELECT unit,posterior FROM micro_mastery WHERE
+                                student_id=? AND course=?""",(sid,course))}
+    recent_errors=c.execute("""SELECT b.unit,b.modality,COUNT(*) total,
+                                 SUM(CASE WHEN a.correct=0 THEN 1 ELSE 0 END) errors
+                           FROM micro_activities a JOIN micro_bank b ON a.question_id=b.id
+                           WHERE a.student_id=? AND a.course=? AND a.finished_at IS NOT NULL
+                           GROUP BY b.unit,b.modality""",(sid,course)).fetchall()
+    errors={(r['unit'],r['modality']):(r['errors'],r['total']) for r in recent_errors}
+    # Exploit observed topic weaknesses in 65% of treatment selections.
+    if secrets.randbelow(100)<65:
+     weights={u:(0.28+1.8*(1-mastery.get(u,PRIOR))) for u in selected}
+     for (topic,_),v in errors.items():
+      if topic in weights:weights[topic]+=0.55*v[0]/max(1,v[1])
+     topic=random.SystemRandom().choices(selected,weights=[weights[u] for u in selected])[0]
+     candidates=[r for r in candidates if r['unit']==topic] or candidates
+     if not modality and secrets.randbelow(100)<70:
+      modes=sorted({r['modality'] for r in candidates})
+      weakness=[(1+2*(errors.get((topic,k),(0,0))[0]/max(1,errors.get((topic,k),(0,0))[1])),k) for k in modes]
+      focus=random.SystemRandom().choices([x[1] for x in weakness],weights=[x[0] for x in weakness])[0]
+      candidates=[r for r in candidates if r['modality']==focus] or candidates
+    # Bayesian posterior sets an instructional tier; it is not an exam score.
+    topic=candidates[0]['unit'] if len({r['unit'] for r in candidates})==1 else random.SystemRandom().choice(candidates)['unit']
+    p=mastery.get(topic,PRIOR)
+    desired=1 if p<.45 else 2 if p<.80 else 3
+    ranked=[(r,abs(int(json.loads(r['payload']).get('level',2))-desired)) for r in candidates]
+    least=min(score for _,score in ranked)
+    candidates=[r for r,score in ranked if score==least]
    chosen=secrets.choice(candidates)
    q=json.loads(chosen['payload'])
-   token=secrets.token_urlsafe(26)
-   c.execute('INSERT INTO micro_activities(token,student_id,course,question_id,started_at,lang,selection_policy) VALUES(?,?,?,?,?,?,?)',(token,sid,course,q['external_id'],iso(),lang,policy))
-  return {'available':True,'token':token,'id':q['external_id'],'course':course,'unit':unit,
-   'modality':q['modality'],'level':q['level'],'prompt':q['prompt_'+lang],'options':q['options_'+lang],
-   'figure_id':q.get('figure_id'),'source':q.get('source',''),'selection_policy':policy}
+   access=secrets.token_urlsafe(26)
+   c.execute("""INSERT INTO micro_activities
+      (token,student_id,course,question_id,started_at,lang,selection_policy,phase)
+      VALUES(?,?,?,?,?,?,?,?)""",(access,sid,course,q['external_id'],iso(),lang,policy,phase))
+  return {'available':True,'token':access,'id':q['external_id'],'course':course,'unit':q['unit'],
+   'modality':q['modality'],'level':q['level'],'prompt':q['prompt_'+lang],
+   'options':q['options_'+lang],'figure_id':q.get('figure_id'),
+   'source':q.get('source',''),'phase':phase,'selection_policy':policy}
  @app.post('/api/micro/answer')
  def answer(data:Answer,authorization:str|None=Header(default=None)):
   sid=student(authorization)
