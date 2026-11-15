@@ -41,6 +41,9 @@ def register(app,db,auth,iso,utc):
    finished_at TEXT,correct INTEGER,elapsed_sec REAL,lang TEXT NOT NULL);
   CREATE INDEX IF NOT EXISTS idx_micro_student_course ON micro_activities(student_id,course);
   """)
+  cols={r['name'] for r in c.execute('PRAGMA table_info(micro_activities)')}
+  if 'selection_policy' not in cols:
+   c.execute("ALTER TABLE micro_activities ADD COLUMN selection_policy TEXT NOT NULL DEFAULT 'random-v1'")
  class Answer(BaseModel):
   token:str=Field(min_length=20,max_length=70)
   answer:int=Field(ge=0,le=5)
@@ -175,13 +178,26 @@ def register(app,db,auth,iso,utc):
    if not rows:return {'available':False,'message':'Este banco no está cargado; solicita al docente que importe el corpus.'}
    recent={r['question_id'] for r in c.execute('SELECT question_id FROM micro_activities WHERE student_id=? AND course=? ORDER BY started_at DESC LIMIT 150',(sid,course))}
    fresh=[r for r in rows if r['id'] not in recent]
-   chosen=secrets.choice(fresh or rows)
+   group=c.execute('SELECT group_name FROM students WHERE id=?',(sid,)).fetchone()
+   treatment=bool(group and group['group_name'] in ('B','D'))
+   policy='adaptive-tier-v1' if treatment else 'random-v1'
+   candidates=fresh or rows
+   if treatment:
+    history=c.execute("""SELECT a.correct FROM micro_activities a JOIN micro_bank q ON a.question_id=q.id
+                         WHERE a.student_id=? AND a.course=? AND q.unit=? AND a.finished_at IS NOT NULL
+                         ORDER BY a.finished_at DESC LIMIT 30""",(sid,course,unit)).fetchall()
+    accuracy=sum(x['correct'] for x in history)/len(history) if history else 0
+    desired=1 if len(history)<3 or accuracy<.55 else 2 if accuracy<.83 else 3
+    levels=[json.loads(x['payload'])['level'] for x in candidates]
+    min_gap=min(abs(level-desired) for level in levels)
+    candidates=[r for r,level in zip(candidates,levels) if abs(level-desired)==min_gap]
+   chosen=secrets.choice(candidates)
    q=json.loads(chosen['payload'])
    token=secrets.token_urlsafe(26)
-   c.execute('INSERT INTO micro_activities(token,student_id,course,question_id,started_at,lang) VALUES(?,?,?,?,?,?)',(token,sid,course,q['external_id'],iso(),lang))
+   c.execute('INSERT INTO micro_activities(token,student_id,course,question_id,started_at,lang,selection_policy) VALUES(?,?,?,?,?,?,?)',(token,sid,course,q['external_id'],iso(),lang,policy))
   return {'available':True,'token':token,'id':q['external_id'],'course':course,'unit':unit,
    'modality':q['modality'],'level':q['level'],'prompt':q['prompt_'+lang],'options':q['options_'+lang],
-   'figure_id':q.get('figure_id'),'source':q.get('source','')}
+   'figure_id':q.get('figure_id'),'source':q.get('source',''),'selection_policy':policy}
  @app.post('/api/micro/answer')
  def answer(data:Answer,authorization:str|None=Header(default=None)):
   sid=student(authorization)
@@ -203,9 +219,9 @@ def register(app,db,auth,iso,utc):
   auth(authorization,True)
   output=io.StringIO()
   writer=csv.writer(output)
-  writer.writerow(['student_code','research_group','degree','course','unit','question_id','modality','source','started_at','finished_at','elapsed_seconds','chosen_index','correct','reviewed_source'])
+  writer.writerow(['student_code','research_group','degree','course','unit','question_id','modality','source','started_at','finished_at','elapsed_seconds','chosen_index','correct','reviewed_source','selection_policy'])
   with db() as c:
-   rows=c.execute("""SELECT s.code,s.group_name,s.degree,a.course,b.unit,a.question_id,b.modality,b.payload,a.started_at,a.finished_at,a.elapsed_sec,a.answer,a.correct
+   rows=c.execute("""SELECT s.code,s.group_name,s.degree,a.course,b.unit,a.question_id,b.modality,b.payload,a.started_at,a.finished_at,a.elapsed_sec,a.answer,a.correct,a.selection_policy
                      FROM micro_activities a
                      JOIN students s ON a.student_id=s.id
                      LEFT JOIN micro_bank b ON b.id=a.question_id
@@ -215,7 +231,7 @@ def register(app,db,auth,iso,utc):
     q=json.loads(d.pop('payload') or '{}')
     vals=[d['code'],d['group_name'],d['degree'],d['course'],d['unit'],d['question_id'],
           d['modality'],q.get('source',''),d['started_at'],d['finished_at'],d['elapsed_sec'],d['answer'],d['correct'],
-          q.get('reviewed',False)]
+          q.get('reviewed',False),d['selection_policy']]
     writer.writerow(["'"+str(v) if isinstance(v,str) and v.startswith(('=','+','-','@')) else v for v in vals])
   data=output.getvalue().encode('utf-8-sig')
   return StreamingResponse(io.BytesIO(data),media_type='text/csv',headers={'Content-Disposition':'attachment; filename="micro_adapta_course_research.csv"','Cache-Control':'no-store'})
