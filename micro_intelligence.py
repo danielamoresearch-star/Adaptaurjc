@@ -76,7 +76,7 @@ def trained_network(c,course):
                     WHERE a.course=? AND a.finished_at IS NOT NULL
                       AND a.features_json IS NOT NULL AND s.group_name IN ('B','D')""",(course,)).fetchone()
  n,n_students=count['n'],count['students']
- if n<160 or n_students<10:return None,'BKT: cold start, insufficient labeled students'
+ if n<160 or n_students<16:return None,'BKT: cold start, insufficient labeled students'
  cached=_MODEL_CACHE.get(course)
  if cached and n<cached[0]+40:return cached[1],cached[2]
  records=c.execute("""SELECT a.student_id,a.features_json,a.correct
@@ -94,7 +94,7 @@ def trained_network(c,course):
   except (ValueError,TypeError):pass
  if len(X)<160:return None,'BKT: insufficient features'
  X=np.array(X,dtype=float);y=np.array(y,dtype=float);mask=np.array(mask,dtype=bool)
- if sum(~mask)<25 or len(set(y[mask]))<2 or len(set(np.array(student_ids)[~mask]))<3 or len(set(np.array(student_ids)[mask]))<8:
+ if sum(~mask)<25 or len(set(y[mask]))<2 or len(set(np.array(student_ids)[~mask]))<5 or len(set(np.array(student_ids)[mask]))<10:
   return None,'BKT: insufficient independent student holdout'
  model=TwoHiddenMLP()
  model.train(X[mask],y[mask])
