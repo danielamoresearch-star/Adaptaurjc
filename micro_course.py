@@ -408,7 +408,8 @@ def register(app,db,auth,iso,utc):
    else:
     answer['suggestion']=('Puedes poner a prueba esta explicación con una nueva pregunta del tema.'
       if lang=='es' else 'Try a new question from this topic to check your understanding.')
-   clean=re.sub(r'[\w.+-]+@[\w.-]+','[email]',data.text)[:500]
+   # Data minimisation: do not retain raw student messages or possible personal information.
+   clean='[consulta redacted; longitud '+str(len(data.text))+' caracteres]'
    c.execute("""INSERT INTO micro_tutor_log(student_id,course,unit,asked_at,question,source_heading,matched)
           VALUES(?,?,?,?,?,?,?)""",(sid,data.course,data.unit,iso(),clean,answer.get('section'),int(answer['matched'])))
   answer['estimated_mastery']=prob
