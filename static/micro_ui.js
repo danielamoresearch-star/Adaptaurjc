@@ -59,9 +59,9 @@
   const panel=el('microPanel');if(!panel)return;
   el('microUnits')?.querySelectorAll('[data-unit]').forEach(x=>x.classList.toggle('selected',Number(x.dataset.unit)===unit));
   const title=catalog?.curriculum?.[course]?.[language]?.[unit-1]||('Tema '+unit);
-  panel.innerHTML='<h2>'+esc(title)+'</h2><p class="muted">Selecciona una actividad. La práctica mantiene el registro de intentos independiente por asignatura.</p><div class="micro-actions"><button class="btn btn-primary" id="microPractice">Practicar preguntas</button><button class="btn btn-soft" id="microRead">Consultar apuntes</button></div><div id="microSlot"></div>';
+  panel.innerHTML='<h2>'+esc(title)+'</h2><p class="muted">Selecciona una actividad. La práctica mantiene el registro de intentos independiente por asignatura.</p><div class="micro-actions"><button class="btn btn-primary" id="microPractice">Practicar preguntas</button><button class="btn btn-soft" id="microRead">Consultar apuntes</button><button class="btn btn-outline" id="microExtra">Recursos y prácticas complementarias</button></div><div id="microSlot"></div>';
   el('microPractice').onclick=()=>practiceSettings();
-  el('microRead').onclick=()=>loadLesson();
+  el('microRead').onclick=()=>loadLesson();el('microExtra').onclick=loadSupplementary;
  }
  function practiceSettings(){
   current=null;const slot=el('microSlot');if(!slot)return;
@@ -108,6 +108,21 @@
    slot.innerHTML='<div class="micro-lesson"><h3>'+esc(d.title)+'</h3><p class="muted-note">Apuntes de referencia del curso. Las ecuaciones están expresadas en LaTeX.</p>'+htmlParts+'</div>';window.adaptaTypeset?.();
   }catch(err){slot.innerHTML='<p class="muted-note">'+esc(err.message)+'</p>'}
  }
+ async function loadSupplementary(){
+  const slot=el('microSlot');if(!slot)return;
+  slot.innerHTML='<div class="muted-note">Cargando recursos complementarios…</div>';
+  try{
+   const data=await call('/api/micro/supplementary?'+new URLSearchParams({course,lang:language}));
+   const resources=data.resources||[];
+   slot.innerHTML='<div class="micro-lesson"><label for="microExtraSelect"><b>Selecciona un recurso de estudio</b></label><select id="microExtraSelect">'+resources.map((r,i)=>'<option value="'+i+'">'+esc(r.title)+'</option>').join('')+'</select><div id="microExtraText"></div></div>';
+   const draw=()=>{
+    const r=resources[Number(el('microExtraSelect').value)],box=el('microExtraText');if(!r||!box)return;
+    box.innerHTML='<h3>'+esc(r.title)+'</h3>'+r.sections.map((section,i)=>'<details class="micro-lesson-section" '+(i===0?'open':'')+'><summary>'+esc(section.heading)+'</summary>'+section.parts.map(part=>'<div class="micro-lesson-part '+esc(part.type)+'">'+esc(part.text)+'</div>').join('')+'</details>').join('');
+    window.adaptaTypeset?.();
+   };
+   el('microExtraSelect').onchange=draw;draw();
+  }catch(e){slot.innerHTML='<p class="muted-note">'+esc(e.message)+'</p>'}
+ }
  async function teacherPanel(){
   const root=el('teacherContent');if(!root||root.querySelector('#microTeacherPackage'))return;
   const sec=document.createElement('section');sec.className='card elevate';sec.id='microTeacherPackage';
@@ -121,7 +136,7 @@
    try{
     const form=new FormData();form.append('file',f);
     const data=await call('/api/micro/import',{method:'POST',body:form});
-    dest.textContent='Importados '+data.imported_questions+' ejercicios ('+JSON.stringify(data.imported_by_course||{})+'), '+data.figures+' figuras y '+data.lesson_units+' unidades bilingües. Los ejercicios paramétricos de Micro II requieren revisión docente.';
+    dest.textContent='Importados '+data.imported_questions+' ejercicios ('+JSON.stringify(data.imported_by_course||{})+'), '+data.figures+' figuras y '+data.lesson_units+' unidades bilingües y '+(data.supplementary_languages||0)+' colecciones complementarias. Los ejercicios paramétricos de Micro II requieren revisión docente.';
    }catch(e){dest.textContent=e.message}finally{b.disabled=false}
   };
  }
