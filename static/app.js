@@ -35,7 +35,7 @@ const res=await (await request('/api/'+(authRole==='teacher'?'teacher':'student'
 }catch(e){$('#login-error').textContent=e.message}finally{b.disabled=false}}
 async function enter(){let data=await(await request('/api/me')).json();$('#auth').hidden=true;
 if(role==='teacher'){$('#app').hidden=true;$('#teacher').hidden=false;$('#mentorWidget').hidden=true;await renderTeacher();return}
-$('#teacher').hidden=true;$('#app').hidden=false;$('#mentorWidget').hidden=false;$('#profileBadge').textContent=data.code||'Estudiante';overview=await(await request('/api/overview')).json();navigate('dashboard');}
+$('#teacher').hidden=true;$('#app').hidden=false;$('#mentorWidget').hidden=false;$('#profileBadge').textContent=data.code||'Estudiante';overview=await(await request('/api/overview')).json();navigate('courses');}
 function logout(){if(token)request('/api/logout',{method:'POST'}).catch(()=>{});token='';role='';active=null;feedback=null;sessionStorage.removeItem('adapta_v6_token');sessionStorage.removeItem('adapta_v6_role');showAuth()}
 function stopTimer(){if(timerHandle){clearInterval(timerHandle);timerHandle=null}}
 function event(type,details={},task_id){if(token&&role==='student')request('/api/event',{method:'POST',body:{event_type:type,details,task_id:task_id||undefined}}).catch(()=>{})}
