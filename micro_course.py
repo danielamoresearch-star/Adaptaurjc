@@ -8,6 +8,7 @@ from xml.etree import ElementTree
 from fastapi import File,UploadFile,Header,HTTPException,Query
 from fastapi.responses import Response,StreamingResponse
 from pydantic import BaseModel,Field
+from micro_intelligence import PRIOR, bayesian_update, model_features, posterior_update, grounded_tutor
 
 CURRICULUM={
  'micro1':{
@@ -42,8 +43,36 @@ def register(app,db,auth,iso,utc):
   CREATE INDEX IF NOT EXISTS idx_micro_student_course ON micro_activities(student_id,course);
   """)
   cols={r['name'] for r in c.execute('PRAGMA table_info(micro_activities)')}
-  if 'selection_policy' not in cols:
-   c.execute("ALTER TABLE micro_activities ADD COLUMN selection_policy TEXT NOT NULL DEFAULT 'random-v1'")
+  for column,sqltype in (
+   ('selection_policy',"TEXT NOT NULL DEFAULT 'random-v1'"),
+   ('phase',"TEXT NOT NULL DEFAULT 'practice'"),
+   ('p_before','REAL'),('p_after','REAL'),('model_version','TEXT'),('features_json','TEXT')):
+   if column not in cols:c.execute("ALTER TABLE micro_activities ADD COLUMN "+column+" "+sqltype)
+  c.executescript("""
+   CREATE TABLE IF NOT EXISTS micro_mastery(
+    student_id INTEGER NOT NULL,course TEXT NOT NULL,unit INTEGER NOT NULL,
+    posterior REAL NOT NULL,updated_at TEXT NOT NULL,
+    PRIMARY KEY(student_id,course,unit));
+   CREATE TABLE IF NOT EXISTS micro_notes_views(
+    id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,
+    course TEXT NOT NULL,unit INTEGER NOT NULL,kind TEXT NOT NULL,
+    seconds REAL NOT NULL,viewed_at TEXT NOT NULL);
+   CREATE INDEX IF NOT EXISTS idx_micro_views ON micro_notes_views(student_id,course,unit);
+   CREATE TABLE IF NOT EXISTS micro_tutor_log(
+    id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,course TEXT NOT NULL,
+    unit INTEGER NOT NULL,asked_at TEXT NOT NULL,question TEXT NOT NULL,
+    source_heading TEXT,matched INTEGER NOT NULL);
+  """)
+ class NotesEvent(BaseModel):
+  course:str
+  unit:int=Field(ge=1,le=4)
+  seconds:float=Field(ge=0,le=3600)
+  kind:str='lesson'
+ class TutorPrompt(BaseModel):
+  course:str
+  unit:int=Field(ge=1,le=4)
+  text:str=Field(min_length=3,max_length=500)
+  lang:str='es'
  class Answer(BaseModel):
   token:str=Field(min_length=20,max_length=70)
   answer:int=Field(ge=0,le=5)
