@@ -277,6 +277,8 @@ def log_event(data:EventRequest,authorization:str|None=Header(default=None)):
 
 from micro_course import register as register_micro_courses
 register_micro_courses(app,database,auth,iso,utc)
+from micro_teacher_export import register as register_micro_teacher_export
+register_micro_teacher_export(app,database,auth,iso,utc)
 from neural_voice import register as register_voice
 register_voice(app,auth)
 from question_import import register as register_import
