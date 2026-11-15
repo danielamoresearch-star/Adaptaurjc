@@ -275,6 +275,8 @@ def log_event(data:EventRequest,authorization:str|None=Header(default=None)):
         event(c,s['student_id'],data.event_type,data.task_id,{str(k)[:60]:str(v)[:200] for k,v in data.details.items() if k in ('page','topic','kind','duration','note','option','seconds_remaining','count','question_id')})
     return {'ok':True}
 
+from micro_course import register as register_micro_courses
+register_micro_courses(app,database,auth,iso,utc)
 from neural_voice import register as register_voice
 register_voice(app,auth)
 from question_import import register as register_import
