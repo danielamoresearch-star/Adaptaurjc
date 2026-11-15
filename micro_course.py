@@ -2,11 +2,11 @@
 The supplied course archive is imported only by an authenticated teacher. A missing
 archive is reported as missing content rather than silently replaced by synthetic items.
 """
-import io,json,random,secrets,zipfile,re,math
+import io,json,csv,random,secrets,zipfile,re,math
 from collections import Counter
 from xml.etree import ElementTree
 from fastapi import File,UploadFile,Header,HTTPException,Query
-from fastapi.responses import Response
+from fastapi.responses import Response,StreamingResponse
 from pydantic import BaseModel,Field
 
 CURRICULUM={
@@ -197,6 +197,27 @@ def register(app,db,auth,iso,utc):
    lang=a['lang']
    return {'correct':bool(correct),'answer':q['answer'],'answer_text':q['options_'+lang][q['answer']],
      'explanation':q['explanation_'+lang],'id':q['external_id']}
+ @app.get('/api/micro/teacher/export')
+ def teacher_export(authorization:str|None=Header(default=None)):
+  auth(authorization,True)
+  output=io.StringIO()
+  writer=csv.writer(output)
+  writer.writerow(['student_code','research_group','degree','course','unit','question_id','modality','source','started_at','finished_at','elapsed_seconds','chosen_index','correct','reviewed_source'])
+  with db() as c:
+   rows=c.execute("""SELECT s.code,s.group_name,s.degree,a.course,b.unit,a.question_id,b.modality,b.payload,a.started_at,a.finished_at,a.elapsed_sec,a.answer,a.correct
+                     FROM micro_activities a
+                     JOIN students s ON a.student_id=s.id
+                     LEFT JOIN micro_bank b ON b.id=a.question_id
+                     ORDER BY a.started_at""").fetchall()
+   for r in rows:
+    d=dict(r)
+    q=json.loads(d.pop('payload') or '{}')
+    vals=[d['code'],d['group_name'],d['degree'],d['course'],d['unit'],d['question_id'],
+          d['modality'],q.get('source',''),d['started_at'],d['finished_at'],d['elapsed_sec'],d['answer'],d['correct'],
+          q.get('reviewed',False)]
+    writer.writerow(["'"+str(v) if isinstance(v,str) and v.startswith(('=','+','-','@')) else v for v in vals])
+  data=output.getvalue().encode('utf-8-sig')
+  return StreamingResponse(io.BytesIO(data),media_type='text/csv',headers={'Content-Disposition':'attachment; filename="micro_adapta_course_research.csv"','Cache-Control':'no-store'})
  @app.get('/api/micro/progress')
  def progress(course:str='micro1',authorization:str|None=Header(default=None)):
   sid=student(authorization);must_course(course)
