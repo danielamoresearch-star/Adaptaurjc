@@ -94,16 +94,20 @@ def trained_network(c,course):
   except (ValueError,TypeError):pass
  if len(X)<160:return None,'BKT: insufficient features'
  X=np.array(X,dtype=float);y=np.array(y,dtype=float);mask=np.array(mask,dtype=bool)
- if sum(~mask)<25 or len(set(y[mask]))<2:
-  return None,'BKT: insufficient independent validation group'
+ if sum(~mask)<25 or len(set(y[mask]))<2 or len(set(np.array([r['student_id'] for r in records])[~mask]))<3 or len(set(np.array([r['student_id'] for r in records])[mask]))<8:
+  return None,'BKT: insufficient independent student holdout'
  model=TwoHiddenMLP()
  model.train(X[mask],y[mask])
  score=log_loss(model.predict(X[~mask]),y[~mask])
  baseline=log_loss(np.repeat(np.mean(y[mask]),sum(~mask)),y[~mask])
- if score>=baseline-.002:
-  _MODEL_CACHE[course]=(n,None,'BKT: neural validation did not improve baseline')
-  return None,'BKT: neural validation did not improve baseline'
- version='BKT+MLP16x8 (pilot; logloss %.3f vs %.3f)'%(score,baseline)
+ bkt_p=np.clip(X[~mask,0]*(1-_FIXED_SLIP)+(1-X[~mask,0])*_FIXED_GUESS,.001,.999)
+ bkt_score=log_loss(bkt_p,y[~mask])
+ nn_brier=float(np.mean((model.predict(X[~mask])-y[~mask])**2))
+ bkt_brier=float(np.mean((bkt_p-y[~mask])**2))
+ if score>=min(baseline,bkt_score)-.002 or nn_brier>bkt_brier+.002:
+  _MODEL_CACHE[course]=(n,None,'BKT: neural pilot did not beat both baseline and BKT on held-out students')
+  return None,'BKT: neural pilot did not beat both baseline and BKT on held-out students'
+ version='BKT+MLP16x8 pilot (held-out logloss %.3f vs BKT %.3f)'%(score,bkt_score)
  _MODEL_CACHE[course]=(n,model,version)
  return model,version
 
