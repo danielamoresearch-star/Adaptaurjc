@@ -25,6 +25,10 @@ SH={'Authorization':'Bearer '+student}
 
 assert check(client.get('/api/me',headers=SH))['role']=='student'
 assert check(client.get('/api/micro/catalog',headers=SH))['curriculum']['micro1']['es']
+check(client.get('/api/micro/teacher/model-validation',headers=SH),403)
+validation=check(client.get('/api/micro/teacher/model-validation',headers=TH))
+assert len(validation['reports'])==2
+assert all(x['status']=='insufficient_data' for x in validation['reports'])
 progress=check(client.get('/api/micro/progress?course=micro1',headers=SH))
 assert progress['diagnostic_count']==0 and len(progress['units'])==3
 assert check(client.post('/api/session/activity',headers=SH))['idle_timeout_seconds']==900
@@ -70,4 +74,4 @@ check(client.post('/api/session/activity',headers=SH),401)
 
 # Teacher access must remain active and be independent of student idle renewal.
 assert check(client.get('/api/me',headers=TH))['role']=='teacher'
-print('PASS: teacher backup; storage status; ten-sheet XLSX; curricular separation; session renewal; 15min server expiry; student/teacher permissions; responsive static assets')
+print('PASS: held-out model safeguards; teacher backup; storage status; ten-sheet XLSX; curricular separation; session renewal; 15min server expiry; student/teacher permissions; responsive static assets')
