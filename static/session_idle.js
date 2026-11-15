@@ -65,7 +65,7 @@
   timer=setInterval(check,2000);check();
   if(!installed){
    installed=true;
-   ['pointerdown','keydown','wheel','touchstart','scroll'].forEach(type=>
+   ['pointerdown','keydown','wheel','touchstart'].forEach(type=>
      document.addEventListener(type,interaction,{capture:true,passive:true}));
    document.addEventListener('visibilitychange',()=>{if(!document.hidden)check()});
    window.addEventListener('focus',check);
@@ -74,5 +74,6 @@
  }
  window.adaptaIdleStart=start;
  window.adaptaIdleStop=stop;
+ window.adaptaSecondsSinceInteraction=()=>student()?Math.max(0,(now()-lastInput)/1000):Infinity;
  window.addEventListener('DOMContentLoaded',()=>{if(student())start(false)});
 })();
