@@ -9,6 +9,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel,Field
 from excel_export import create_workbook
 from micro_course import CURRICULUM
+from micro_kpis import build_kpi_sheets
 
 def average(values):
  xs=[float(v) for v in values if v is not None]
@@ -280,6 +281,7 @@ def register(app,db,auth,iso,utc):
    ('Lecturas',views_header,viewrows),
    ('Tutor',tutor_header,tutorrows),
    ('Diccionario',glossary[0],glossary[1:])]
+  sheets.extend(build_kpi_sheets(students,attempts,sessions,studies,tutor,mastery,utc()))
   workbook=create_workbook(sheets)
   return StreamingResponse(io.BytesIO(workbook),
    media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
